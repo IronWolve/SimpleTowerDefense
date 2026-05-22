@@ -36,7 +36,7 @@ const HELP_TEXT := _H + "Controls" + _HE + \
 """Toggle in Options: Hard mode (no bonus lives, 40% less starting gold), Unlimited lives / money, No-cost walls, 30s round timer with early-send bonus, hold-drag wall building. Settings persist across sessions.
 
 """ + _H + "Maps & Editor" + _HE + \
-"""In Options pick a pre-built map (Open field, Maze, Fun Map, Spiral), choose Generated for one continuous single-path labyrinth - no branches or dead ends, sized to the board, a fresh layout each New Game, or build your own: enable No-cost walls, lay out your walls in-game, type a name and press Save. Saved maps appear in the dropdown as "Custom - name". Click Maps Folder to open the save directory in your file manager (desktop only).
+"""In Options pick a pre-built map (Open field, Maze, Fun Map, Spiral), choose Generated for one continuous single-path labyrinth - no branches or dead ends, with a few solid 3x3 blocks to build tower clusters on (great for the Amplifier), a fresh layout each New Game (spawn/base move to the path's ends), or build your own: enable No-cost walls, lay out your walls in-game, type a name and press Save. Saved maps appear in the dropdown as "Custom - name". Click Maps Folder to open the save directory in your file manager (desktop only).
 
 """ + _H + "Tower Stats   (Level 1 -> Level 10)" + _HE + \
 """[b]Bullet[/b]   15 dmg @ 1.0/s    ->   109 dmg @ 3.25/s   (rate caps at 4.0/s)

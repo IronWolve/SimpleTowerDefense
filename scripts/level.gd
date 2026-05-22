@@ -190,11 +190,21 @@ func _build_maze() -> void:
 var _ham_nx := 0
 var _ham_ny := 0
 var _ham_base_row := 0
+var _ham_blocked := {}  # lattice nodes that are solid tower-blocks (path avoids)
 
 func _build_generated_map() -> void:
-	var grid := _generate_hamiltonian()
+	# Prefer a labyrinth with a few solid 3x3 tower-blocks (path winds around
+	# them, ~85% coverage). Fall back to the full no-block labyrinth, then the
+	# simple serpentine, so a map always appears.
+	var grid: Array = []
+	for _a in range(6):  # blocked gen succeeds ~50%/try; retry so blocks appear
+		grid = _generate_blocked()
+		if not grid.is_empty():
+			break
 	if grid.is_empty():
-		grid = _generate_serpentine(randf() < 0.5)  # fallback
+		grid = _generate_hamiltonian()
+	if grid.is_empty():
+		grid = _generate_serpentine(randf() < 0.5)
 	for r in range(ROWS):
 		for c in range(COLS):
 			if grid[r][c] == 1:
@@ -210,10 +220,10 @@ func _hnbrs(n: int) -> Array:
 	var i := n % _ham_nx
 	var j := n / _ham_nx
 	var o: Array = []
-	if i > 0: o.append(n - 1)
-	if i < _ham_nx - 1: o.append(n + 1)
-	if j > 0: o.append(n - _ham_nx)
-	if j < _ham_ny - 1: o.append(n + _ham_nx)
+	if i > 0 and not _ham_blocked.has(n - 1): o.append(n - 1)
+	if i < _ham_nx - 1 and not _ham_blocked.has(n + 1): o.append(n + 1)
+	if j > 0 and not _ham_blocked.has(n - _ham_nx): o.append(n - _ham_nx)
+	if j < _ham_ny - 1 and not _ham_blocked.has(n + _ham_nx): o.append(n + _ham_nx)
 	return o
 
 ## Backbite the path's last endpoint: rewire it to a random grid-neighbour that
@@ -243,12 +253,126 @@ func _backbite(path: Array, pos: Dictionary, tcol: int) -> void:
 		pos[path[lo]] = lo; pos[path[hi]] = hi
 		lo += 1; hi -= 1
 
+## A Warnsdorff self-avoiding fill of the (possibly holed) lattice from `start`:
+## always step to the unvisited neighbour with the fewest onward moves. Returns
+## the visited path (a simple path); coverage varies, so the caller takes the
+## best of several tries.
+func _warnsdorff(start: int) -> Array:
+	var visited := {start: true}
+	var path: Array = [start]
+	var cur := start
+	while true:
+		var opts: Array = []
+		for nb in _hnbrs(cur):
+			if not visited.has(nb): opts.append(nb)
+		if opts.is_empty():
+			break
+		opts.shuffle()
+		var best: int = opts[0]
+		var bd := 99
+		for o in opts:
+			var d := 0
+			for n2 in _hnbrs(o):
+				if not visited.has(n2): d += 1
+			if d < bd:
+				bd = d
+				best = o
+		visited[best] = true
+		path.append(best)
+		cur = best
+	return path
+
+## Labyrinth with a few solid 3x3 tower-blocks: excluding a lattice node walls
+## off the 3x3 cell region around it, and the path (Warnsdorff fill, best of
+## several tries, then backbite-randomized and steered to the edges) winds
+## around them. ~85% of the rest is corridor. Returns [] to fall back.
+func _generate_blocked() -> Array:
+	_ham_nx = (COLS + 1) / 2
+	_ham_base_row = (ROWS / 2) % 2
+	_ham_ny = (ROWS - 1 - _ham_base_row) / 2 + 1
+	if _ham_nx < 6 or _ham_ny < 5:
+		return []  # too small for blocks - let the full labyrinth handle it
+	var nx := _ham_nx
+	# Pick 3-4 well-separated interior block centres.
+	_ham_blocked = {}
+	var centres: Array = []
+	var want := 3 + (randi() % 2)
+	var guard := 0
+	while centres.size() < want and guard < 200:
+		guard += 1
+		var i := 2 + randi() % (nx - 4)
+		var j := 1 + randi() % (_ham_ny - 2)
+		var n := j * nx + i
+		var ok := true
+		for c in centres:
+			if absi(c % nx - i) + absi(c / nx - j) < 3:
+				ok = false
+		if ok:
+			centres.append(n)
+			_ham_blocked[n] = true
+	var need := nx * _ham_ny - _ham_blocked.size()
+	# Best of several Warnsdorff fills (free endpoints).
+	var path: Array = []
+	for _s in range(28):
+		var start := -1
+		for _t in range(20):
+			var cand := randi() % (nx * _ham_ny)
+			if not _ham_blocked.has(cand):
+				start = cand
+				break
+		if start < 0:
+			continue
+		var p := _warnsdorff(start)
+		if p.size() > path.size():
+			path = p
+		if path.size() == need:
+			break
+	if path.size() < int(need * 0.7):
+		return []  # too sparse this roll - fall back
+	# Randomize the interior, then steer the two ends to the left/right columns.
+	var pos := {}
+	for i in range(path.size()): pos[path[i]] = i
+	var n4 := path.size() * 4
+	for _it in range(n4): _backbite(path, pos, -1)
+	for _it in range(n4):
+		if path[path.size() - 1] % nx == nx - 1: break
+		_backbite(path, pos, nx - 1)
+	path.reverse()
+	pos.clear()
+	for i in range(path.size()): pos[path[i]] = i
+	for _it in range(n4):
+		if path[path.size() - 1] % nx == 0: break
+		_backbite(path, pos, 0)
+	if path[0] % nx != nx - 1 or path[path.size() - 1] % nx != 0:
+		return []
+	# Build the grid: walls everywhere, carve the path corridor (blocks stay solid
+	# because the path never touches their nodes or the gaps around them).
+	var g: Array = []
+	for r in range(ROWS):
+		var row: Array = []
+		for c in range(COLS):
+			row.append(1)
+		g.append(row)
+	for i in range(path.size()):
+		var c: Vector2i = _hcell(path[i])
+		g[c.y][c.x] = 0
+		if i > 0:
+			var mc: Vector2i = (c + _hcell(path[i - 1])) / 2
+			g[mc.y][mc.x] = 0
+	var right_end: Vector2i = _hcell(path[0])
+	spawn_cell = _hcell(path[path.size() - 1])
+	base_cell = Vector2i(COLS - 1, right_end.y)
+	for x in range(right_end.x, COLS):
+		g[right_end.y][x] = 0
+	return g
+
 ## Returns a 0/1 grid (1=wall) for the Hamiltonian labyrinth and moves spawn /
 ## base to the path's two ends, or [] if steering the ends to the edges failed.
 func _generate_hamiltonian() -> Array:
 	_ham_nx = (COLS + 1) / 2          # even-column lattice cols
 	_ham_base_row = (ROWS / 2) % 2    # rows share the middle row's parity
 	_ham_ny = (ROWS - 1 - _ham_base_row) / 2 + 1
+	_ham_blocked = {}                 # full coverage, no blocks
 	if _ham_nx < 2 or _ham_ny < 2:
 		return []
 	var nx := _ham_nx
