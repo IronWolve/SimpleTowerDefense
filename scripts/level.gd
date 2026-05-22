@@ -197,7 +197,7 @@ func _build_generated_map() -> void:
 	# them, ~85% coverage). Fall back to the full no-block labyrinth, then the
 	# simple serpentine, so a map always appears.
 	var grid: Array = []
-	for _a in range(6):  # blocked gen succeeds ~50%/try; retry so blocks appear
+	for _a in range(12):  # blocked gen succeeds ~50%/try; retry so blocks appear
 		grid = _generate_blocked()
 		if not grid.is_empty():
 			break
@@ -233,6 +233,9 @@ func _backbite(path: Array, pos: Dictionary, tcol: int) -> void:
 	var k := path.size()
 	var cands: Array = []
 	for u in _hnbrs(path[k - 1]):
+		# Skip neighbours not on the path (blocked gen doesn't cover every node).
+		if not pos.has(u):
+			continue
 		var j: int = pos[u]
 		if j < k - 2:
 			cands.append(j)
@@ -252,6 +255,17 @@ func _backbite(path: Array, pos: Dictionary, tcol: int) -> void:
 		var t = path[lo]; path[lo] = path[hi]; path[hi] = t
 		pos[path[lo]] = lo; pos[path[hi]] = hi
 		lo += 1; hi -= 1
+
+## Backbite-randomize the whole path, working BOTH ends by reversing between
+## bursts - otherwise one end stays as the boustrophedon seed (visible lanes).
+## `bursts` should be even so the path's orientation is preserved.
+func _randomize_both_ends(path: Array, pos: Dictionary, bursts: int, per: int) -> void:
+	for _b in range(bursts):
+		for _it in range(per):
+			_backbite(path, pos, -1)
+		path.reverse()
+		pos.clear()
+		for i in range(path.size()): pos[path[i]] = i
 
 ## A Warnsdorff self-avoiding fill of the (possibly holed) lattice from `start`:
 ## always step to the unvisited neighbour with the fewest onward moves. Returns
@@ -313,7 +327,7 @@ func _generate_blocked() -> Array:
 	var need := nx * _ham_ny - _ham_blocked.size()
 	# Best of several Warnsdorff fills (free endpoints).
 	var path: Array = []
-	for _s in range(28):
+	for _s in range(48):
 		var start := -1
 		for _t in range(20):
 			var cand := randi() % (nx * _ham_ny)
@@ -327,13 +341,13 @@ func _generate_blocked() -> Array:
 			path = p
 		if path.size() == need:
 			break
-	if path.size() < int(need * 0.7):
+	if path.size() < int(need * 0.6):
 		return []  # too sparse this roll - fall back
-	# Randomize the interior, then steer the two ends to the left/right columns.
+	# Randomize the whole interior (both ends), then steer the ends to the edges.
 	var pos := {}
 	for i in range(path.size()): pos[path[i]] = i
 	var n4 := path.size() * 4
-	for _it in range(n4): _backbite(path, pos, -1)
+	_randomize_both_ends(path, pos, 8, path.size())
 	for _it in range(n4):
 		if path[path.size() - 1] % nx == nx - 1: break
 		_backbite(path, pos, nx - 1)
@@ -386,8 +400,8 @@ func _generate_hamiltonian() -> Array:
 			for j in range(_ham_ny - 1, -1, -1): path.append(j * nx + col)
 	var pos := {}
 	for i in range(path.size()): pos[path[i]] = i
-	# Randomize the interior, then steer the two ends to the left/right columns.
-	for _it in range(total * 4): _backbite(path, pos, -1)
+	# Randomize the whole interior (both ends), then steer the ends to the edges.
+	_randomize_both_ends(path, pos, 8, total)
 	for _it in range(total * 4):
 		if path[path.size() - 1] % nx == nx - 1: break
 		_backbite(path, pos, nx - 1)
