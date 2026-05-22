@@ -50,9 +50,8 @@ func display_name() -> String:
 
 func info_text() -> String:
 	if type == "gold":
-		var board_total := level_ref.gold_bonus() * 100.0 if level_ref != null else _support_pct() * 100.0
-		return "gold from kills +%.1f%%   (all Gold Mines total +%.1f%%)" % [
-			_support_pct() * 100.0, board_total]
+		# Per-mine numbers live on the 3rd "Amplified -> gold -> map" line below.
+		return "gold from kills"
 	if type == "amplifier":
 		return "+%.1f%% to the 8 pieces touching it: damage, slow, DoT, gold (stacks with other amps)" % (_support_pct() * 100.0)
 	if mode == "beam":
@@ -107,12 +106,19 @@ func enhancement_text() -> String:
 	if level_ref == null:
 		return ""
 	var b := level_ref.amplifier_bonus_at(cell)
+	if type == "gold":
+		# Always show the flow: amplifier bonus -> this mine's rate -> the
+		# board-wide total of every Gold Mine.
+		var gamp := minf(Level.GOLD_AMP_CAP, b)
+		var mine := _support_pct() * (1.0 + gamp) * 100.0
+		var board := level_ref.gold_bonus() * 100.0
+		var ga := GameState.arrow()
+		if gamp > 0.0:
+			return "Amplified +%d%%   %s   gold +%.1f%%   %s   map +%.1f%%" % [
+				int(round(gamp * 100.0)), ga, mine, ga, board]
+		return "gold +%.1f%%   %s   map total +%.1f%%" % [mine, ga, board]
 	if b <= 0.0:
 		return ""
-	if type == "gold":
-		var amp := minf(Level.GOLD_AMP_CAP, b)
-		return "Amplified  +%d%%   %s   gold +%.1f%%" % [
-			int(round(amp * 100.0)), GameState.arrow(), _support_pct() * (1.0 + amp) * 100.0]
 	if mode == "slow":
 		# Ice: amp lifts the chill toward SLOW_BOOST_CAP.
 		var eff := minf(PieceData.SLOW_BOOST_CAP, slow * (1.0 + b))
