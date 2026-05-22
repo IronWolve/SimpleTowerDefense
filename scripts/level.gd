@@ -186,13 +186,91 @@ func _build_maze() -> void:
 ## winding path with NO branches and NO dead ends - enemies must walk the entire
 ## snake. Verified with BFS before stamping.
 func _build_generated_map() -> void:
-	var grid := _generate_serpentine(randf() < 0.5)
-	if _grid_path_len(grid, spawn_cell, base_cell) < 0:
-		grid = _generate_serpentine(true)  # safety fallback (should never hit)
+	# Try a 2D wandering single path (turns both ways). Fall back to the simple
+	# vertical serpentine if the random walk can't reach the base in time.
+	var grid: Array = []
+	var got := false
+	for _attempt in range(120):
+		var g := _try_unicursal_walk()
+		if not g.is_empty():
+			grid = g
+			got = true
+			break
+	if not got:
+		grid = _generate_serpentine(randf() < 0.5)
 	for r in range(ROWS):
 		for c in range(COLS):
 			if grid[r][c] == 1:
 				_place_map_wall(Vector2i(c, r))
+
+## One attempt at a self-avoiding walk on the coarse lattice (cells 2 apart, rows
+## sharing the spawn row's parity so spawn/base land on it). It wanders with a
+## Warnsdorff bias and only steps onto the goal when forced, producing a single
+## path that turns in both directions. Returns a 0/1 grid, or [] if it got stuck
+## before reaching the goal.
+func _try_unicursal_walk() -> Array:
+	var mid := ROWS / 2
+	var par := mid % 2
+	var goal_x := COLS - 1 if (COLS - 1) % 2 == 0 else COLS - 2
+	var start := Vector2i(0, mid)
+	var goal := Vector2i(goal_x, mid)
+	var dirs := [Vector2i(2, 0), Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2)]
+	var on_lattice := func(c: Vector2i) -> bool:
+		return c.x >= 0 and c.x < COLS and c.y >= 0 and c.y < ROWS \
+			and c.x % 2 == 0 and c.y % 2 == par
+	var visited := {start: true}
+	var path: Array[Vector2i] = [start]
+	var cur := start
+	while cur != goal:
+		var opts: Array[Vector2i] = []
+		for d in dirs:
+			var nb: Vector2i = cur + d
+			if on_lattice.call(nb) and not visited.has(nb) and nb != goal:
+				opts.append(nb)
+		if opts.is_empty():
+			# Only the goal (or nothing) is left adjacent.
+			var at_goal := false
+			for d in dirs:
+				if cur + d == goal:
+					at_goal = true
+			if at_goal:
+				path.append(goal)
+				cur = goal
+				break
+			return []  # stuck
+		# Warnsdorff: pick the neighbour with the fewest onward moves (random ties).
+		opts.shuffle()
+		var best: Vector2i = opts[0]
+		var best_deg := 99
+		for o in opts:
+			var deg := 0
+			for d in dirs:
+				var n2: Vector2i = o + d
+				if on_lattice.call(n2) and not visited.has(n2):
+					deg += 1
+			if deg < best_deg:
+				best_deg = deg
+				best = o
+		visited[best] = true
+		path.append(best)
+		cur = best
+	# Realize: walls everywhere, open the path nodes + the cell between each
+	# consecutive pair, then attach the real base cell beside the goal node.
+	var g: Array = []
+	for r in range(ROWS):
+		var row: Array = []
+		for c in range(COLS):
+			row.append(1)
+		g.append(row)
+	for i in range(path.size()):
+		var p: Vector2i = path[i]
+		g[p.y][p.x] = 0
+		if i > 0:
+			var mid_cell: Vector2i = (path[i] + path[i - 1]) / 2
+			g[mid_cell.y][mid_cell.x] = 0
+	g[spawn_cell.y][spawn_cell.x] = 0
+	g[base_cell.y][base_cell.x] = 0
+	return g
 
 ## Returns a fresh 0/1 grid for the serpentine. Vertical 1-wide corridors sit on
 ## every even column, joined by a single gap to the next. The gap row alternates

@@ -36,7 +36,7 @@ const HELP_TEXT := _H + "Controls" + _HE + \
 """Toggle in Options: Hard mode (no bonus lives, 40% less starting gold), Unlimited lives / money, No-cost walls, 30s round timer with early-send bonus, hold-drag wall building. Settings persist across sessions.
 
 """ + _H + "Maps & Editor" + _HE + \
-"""In Options pick a pre-built map (Open field, Maze, Fun Map, Spiral), choose Generate for one continuous space-filling snake path - no dead ends, sized to the board, a fresh layout each New Game, or build your own: enable No-cost walls, lay out your walls in-game, type a name and press Save. Saved maps appear in the dropdown as "Custom - name". Click Maps Folder to open the save directory in your file manager (desktop only).
+"""In Options pick a pre-built map (Open field, Maze, Fun Map, Spiral), choose Generated for one continuous single-path labyrinth - no branches or dead ends, sized to the board, a fresh layout each New Game, or build your own: enable No-cost walls, lay out your walls in-game, type a name and press Save. Saved maps appear in the dropdown as "Custom - name". Click Maps Folder to open the save directory in your file manager (desktop only).
 
 """ + _H + "Tower Stats   (Level 1 -> Level 10)" + _HE + \
 """[b]Bullet[/b]   15 dmg @ 1.0/s    ->   109 dmg @ 3.25/s   (rate caps at 4.0/s)
@@ -738,7 +738,7 @@ func _refresh_map_select() -> void:
 	_map_select.add_item("Map:  Maze")        # 1 -> "maze"
 	_map_select.add_item("Map:  Fun Map")     # 2 -> "fun"
 	_map_select.add_item("Map:  Spiral")      # 3 -> "spiral"
-	_map_select.add_item("Map:  Generate (random)")  # 4 -> "generate"
+	_map_select.add_item("Map:  Generated")  # 4 -> "generate"
 	_custom_map_names = GameState.list_custom_maps()
 	for name in _custom_map_names:
 		_map_select.add_item("Map:  Custom - " + name)
