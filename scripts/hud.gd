@@ -5,7 +5,7 @@ extends CanvasLayer
 
 const BAR_Y := 600.0
 const APP_NAME := "Simple Tower Defense"
-const APP_VERSION := "v27"
+const APP_VERSION := "v30"
 const BUY_TYPES := ["tower", "ice", "laser", "cannon", "sniper", "missile",
 	"wall", "tar_trap", "spike_trap", "poison_trap", "fire_trap", "volcano_trap"]
 const SPEEDS := [0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 20.0, 50.0, 100.0]

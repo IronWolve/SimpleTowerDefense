@@ -18,8 +18,6 @@ var aoe_radius := 0.0
 
 var _cooldown := 0.0
 var _beam_targets: Array = []
-var _slow_targets: Array = []
-var _slow_flash := 0.0
 
 func _apply_stats() -> void:
 	var s := PieceData.tower_stats(type, level)
@@ -88,7 +86,8 @@ func _process(delta: float) -> void:
 		_cooldown += 1.0 / fire_rate
 		shots += 1
 
-## Ice tower: every interval, chill the frontmost enemies in range at once.
+## Ice tower: every interval, chill every enemy in range at once. No firing
+## visual - the slow status icon on enemies is the only feedback (no flicker).
 func _process_slow(delta: float) -> void:
 	_cooldown -= delta
 	var pulses := 0
@@ -101,13 +100,8 @@ func _process_slow(delta: float) -> void:
 			var e := node as Enemy
 			# Ice only slows - no direct damage, no cripple (single status icon).
 			e.apply_slow(slow, slow_time)
-		_slow_targets = targets
-		_slow_flash = 0.18
 		_cooldown += 1.0 / fire_rate
 		pulses += 1
-	if _slow_flash > 0.0:
-		_slow_flash -= delta
-	queue_redraw()
 
 ## The laser beam always hits a single target, regardless of level.
 func _beam_count() -> int:
@@ -176,22 +170,16 @@ func _direct_hit(target: Enemy) -> void:
 func _draw() -> void:
 	if mode == "beam":
 		for node in _beam_targets:
+			# Validate BEFORE casting: `as Enemy` on a freed object hard-crashes
+			# in release builds. _beam_targets can hold stale refs (e.g. after
+			# game over, when _process stops refreshing the list).
+			if not is_instance_valid(node):
+				continue
 			var t := node as Enemy
-			if t != null and is_instance_valid(t) and t.is_alive():
+			if t != null and t.is_alive():
 				var lp := t.position - position
 				draw_line(Vector2.ZERO, lp, Color(bullet_color, 0.85), 3.0)
 				draw_circle(lp, 5.0, bullet_color)
-	if mode == "slow" and _slow_flash > 0.0:
-		var f := _slow_flash / 0.18
-		# Frost field covering the whole chilled radius.
-		draw_circle(Vector2.ZERO, range_radius, Color(bullet_color, 0.12 * f))
-		draw_arc(Vector2.ZERO, range_radius, 0.0, TAU, 48,
-			Color(bullet_color, 0.5 * f), 2.0)
-		for node in _slow_targets:
-			var e := node as Enemy
-			if e != null and is_instance_valid(e) and e.is_alive():
-				var sp := e.position - position
-				_draw_snowflake(sp, 6.5, bullet_color)
 	if selected:
 		draw_circle(Vector2.ZERO, range_radius, Color(1, 1, 1, 0.06))
 		draw_arc(Vector2.ZERO, range_radius, 0.0, TAU, 48, Color(1, 1, 1, 0.40), 1.5)
@@ -242,9 +230,3 @@ func _draw_type_glyph() -> void:
 			draw_colored_polygon(PackedVector2Array([
 				Vector2(-2, 5), Vector2(0, 9.5), Vector2(2, 5)]),
 				Color(1.0, 0.78, 0.30))
-
-func _draw_snowflake(c: Vector2, s: float, col: Color) -> void:
-	for i in range(3):
-		var arm := Vector2.RIGHT.rotated(PI / 3.0 * i) * s
-		draw_line(c - arm, c + arm, col, 1.6)
-	draw_circle(c, 1.8, col)

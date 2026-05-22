@@ -14,6 +14,11 @@ run/main_scene="res://scenes/main.tscn"
 Events="*res://scripts/events.gd"
 GameState="*res://scripts/game_state.gd"
 
+[debug]
+
+file_logging/enable_file_logging=true
+file_logging/enable_file_logging.pc=true
+
 [display]
 
 window/size/viewport_width=1280
