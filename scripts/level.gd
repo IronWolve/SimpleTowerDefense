@@ -180,82 +180,102 @@ func _build_maze() -> void:
 		gap_top = not gap_top
 		x += 4
 
-## Builds a single continuous space-filling corridor (a serpentine snake) from
-## spawn to base. Vertical 1-wide corridors on every other column are joined end
-## to end by single gaps that alternate top/bottom, so the whole board is one
-## winding path with NO branches and NO dead ends - enemies must walk the entire
-## snake. Verified with BFS before stamping.
+## Builds a full-coverage single-path labyrinth: a Hamiltonian path over the
+## coarse lattice (every cell on ONE route - no dead ends, no branches, no
+## self-crossing, fills the board) that turns in both directions. Spawn and base
+## are moved to the path's two ends on the left/right edges, so they vary per
+## game. Built by randomizing a snake seed with backbite, then steering the ends
+## to the edges - fast and reliable; falls back to the simple serpentine.
+## Lattice columns are the even cells; rows share the middle row's parity.
+var _ham_nx := 0
+var _ham_ny := 0
+var _ham_base_row := 0
+
 func _build_generated_map() -> void:
-	# Try a 2D wandering single path (turns both ways). Fall back to the simple
-	# vertical serpentine if the random walk can't reach the base in time.
-	var grid: Array = []
-	var got := false
-	for _attempt in range(120):
-		var g := _try_unicursal_walk()
-		if not g.is_empty():
-			grid = g
-			got = true
-			break
-	if not got:
-		grid = _generate_serpentine(randf() < 0.5)
+	var grid := _generate_hamiltonian()
+	if grid.is_empty():
+		grid = _generate_serpentine(randf() < 0.5)  # fallback
 	for r in range(ROWS):
 		for c in range(COLS):
 			if grid[r][c] == 1:
 				_place_map_wall(Vector2i(c, r))
 
-## One attempt at a self-avoiding walk on the coarse lattice (cells 2 apart, rows
-## sharing the spawn row's parity so spawn/base land on it). It wanders with a
-## Warnsdorff bias and only steps onto the goal when forced, producing a single
-## path that turns in both directions. Returns a 0/1 grid, or [] if it got stuck
-## before reaching the goal.
-func _try_unicursal_walk() -> Array:
-	var mid := ROWS / 2
-	var par := mid % 2
-	var goal_x := COLS - 1 if (COLS - 1) % 2 == 0 else COLS - 2
-	var start := Vector2i(0, mid)
-	var goal := Vector2i(goal_x, mid)
-	var dirs := [Vector2i(2, 0), Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2)]
-	var on_lattice := func(c: Vector2i) -> bool:
-		return c.x >= 0 and c.x < COLS and c.y >= 0 and c.y < ROWS \
-			and c.x % 2 == 0 and c.y % 2 == par
-	var visited := {start: true}
-	var path: Array[Vector2i] = [start]
-	var cur := start
-	while cur != goal:
-		var opts: Array[Vector2i] = []
-		for d in dirs:
-			var nb: Vector2i = cur + d
-			if on_lattice.call(nb) and not visited.has(nb) and nb != goal:
-				opts.append(nb)
-		if opts.is_empty():
-			# Only the goal (or nothing) is left adjacent.
-			var at_goal := false
-			for d in dirs:
-				if cur + d == goal:
-					at_goal = true
-			if at_goal:
-				path.append(goal)
-				cur = goal
-				break
-			return []  # stuck
-		# Warnsdorff: pick the neighbour with the fewest onward moves (random ties).
-		opts.shuffle()
-		var best: Vector2i = opts[0]
-		var best_deg := 99
-		for o in opts:
-			var deg := 0
-			for d in dirs:
-				var n2: Vector2i = o + d
-				if on_lattice.call(n2) and not visited.has(n2):
-					deg += 1
-			if deg < best_deg:
-				best_deg = deg
-				best = o
-		visited[best] = true
-		path.append(best)
-		cur = best
-	# Realize: walls everywhere, open the path nodes + the cell between each
-	# consecutive pair, then attach the real base cell beside the goal node.
+## Lattice <-> cell helpers (node index = j * NX + i).
+func _hcell(n: int) -> Vector2i:
+	var i := n % _ham_nx
+	var j := n / _ham_nx
+	return Vector2i(2 * i, _ham_base_row + 2 * j)
+
+func _hnbrs(n: int) -> Array:
+	var i := n % _ham_nx
+	var j := n / _ham_nx
+	var o: Array = []
+	if i > 0: o.append(n - 1)
+	if i < _ham_nx - 1: o.append(n + 1)
+	if j > 0: o.append(n - _ham_nx)
+	if j < _ham_ny - 1: o.append(n + _ham_nx)
+	return o
+
+## Backbite the path's last endpoint: rewire it to a random grid-neighbour that
+## lies earlier in the path (reversing the tail). If tcol >= 0, prefer the move
+## whose new endpoint is nearest that lattice column (steers the end to an edge).
+func _backbite(path: Array, pos: Dictionary, tcol: int) -> void:
+	var k := path.size()
+	var cands: Array = []
+	for u in _hnbrs(path[k - 1]):
+		var j: int = pos[u]
+		if j < k - 2:
+			cands.append(j)
+	if cands.is_empty():
+		return
+	var jpick: int = cands[randi() % cands.size()]
+	if tcol >= 0:
+		var bestd := 1 << 30
+		for j in cands:
+			var d: int = absi((path[j + 1] % _ham_nx) - tcol)
+			if d < bestd:
+				bestd = d
+				jpick = j
+	var lo := jpick + 1
+	var hi := k - 1
+	while lo < hi:
+		var t = path[lo]; path[lo] = path[hi]; path[hi] = t
+		pos[path[lo]] = lo; pos[path[hi]] = hi
+		lo += 1; hi -= 1
+
+## Returns a 0/1 grid (1=wall) for the Hamiltonian labyrinth and moves spawn /
+## base to the path's two ends, or [] if steering the ends to the edges failed.
+func _generate_hamiltonian() -> Array:
+	_ham_nx = (COLS + 1) / 2          # even-column lattice cols
+	_ham_base_row = (ROWS / 2) % 2    # rows share the middle row's parity
+	_ham_ny = (ROWS - 1 - _ham_base_row) / 2 + 1
+	if _ham_nx < 2 or _ham_ny < 2:
+		return []
+	var nx := _ham_nx
+	var total := nx * _ham_ny
+	# Seed: a column boustrophedon (a valid Hamiltonian path).
+	var path: Array = []
+	for col in range(nx):
+		if col % 2 == 0:
+			for j in range(_ham_ny): path.append(j * nx + col)
+		else:
+			for j in range(_ham_ny - 1, -1, -1): path.append(j * nx + col)
+	var pos := {}
+	for i in range(path.size()): pos[path[i]] = i
+	# Randomize the interior, then steer the two ends to the left/right columns.
+	for _it in range(total * 4): _backbite(path, pos, -1)
+	for _it in range(total * 4):
+		if path[path.size() - 1] % nx == nx - 1: break
+		_backbite(path, pos, nx - 1)
+	path.reverse()
+	pos.clear()
+	for i in range(path.size()): pos[path[i]] = i
+	for _it in range(total * 4):
+		if path[path.size() - 1] % nx == 0: break
+		_backbite(path, pos, 0)
+	if path[0] % nx != nx - 1 or path[path.size() - 1] % nx != 0:
+		return []  # couldn't place both ends on the edges - fall back
+	# Build the wall grid: walls everywhere, then carve the path corridor.
 	var g: Array = []
 	for r in range(ROWS):
 		var row: Array = []
@@ -263,13 +283,17 @@ func _try_unicursal_walk() -> Array:
 			row.append(1)
 		g.append(row)
 	for i in range(path.size()):
-		var p: Vector2i = path[i]
-		g[p.y][p.x] = 0
+		var c: Vector2i = _hcell(path[i])
+		g[c.y][c.x] = 0
 		if i > 0:
-			var mid_cell: Vector2i = (path[i] + path[i - 1]) / 2
-			g[mid_cell.y][mid_cell.x] = 0
-	g[spawn_cell.y][spawn_cell.x] = 0
-	g[base_cell.y][base_cell.x] = 0
+			var mc: Vector2i = (c + _hcell(path[i - 1])) / 2
+			g[mc.y][mc.x] = 0
+	# Move spawn / base to the two ends; extend base out to the far edge column.
+	var right_end: Vector2i = _hcell(path[0])
+	spawn_cell = _hcell(path[path.size() - 1])
+	base_cell = Vector2i(COLS - 1, right_end.y)
+	for x in range(right_end.x, COLS):
+		g[right_end.y][x] = 0
 	return g
 
 ## Returns a fresh 0/1 grid for the serpentine. Vertical 1-wide corridors sit on
