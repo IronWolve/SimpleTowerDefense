@@ -34,7 +34,25 @@ func _apply_stats() -> void:
 	reach = aoe if aoe > 0.0 else REACH
 
 func can_upgrade() -> bool:
+	# Tar only slows; once it reaches the slow cap (at SLOW_MAX_LEVEL) more levels
+	# do nothing, so stop there. Damage-dealing traps keep scaling.
+	if type == "tar_trap":
+		return level < PieceData.SLOW_MAX_LEVEL
 	return true
+
+## Adjacent-Amplifier bonus fraction for this trap's cell (0 when none).
+func _amp() -> float:
+	return level_ref.amplifier_bonus_at(cell) if level_ref != null else 0.0
+
+## Eruption/AOE radius after adjacent-Amplifier boost. Only AOE traps (Volcano)
+## grow; contact traps keep their fixed REACH detection radius.
+func _boosted_reach() -> float:
+	if not AOE_TYPES.has(type):
+		return reach
+	var v := reach * (1.0 + _amp())
+	if PieceData.AOE_CAP.has(type):
+		return minf(PieceData.AOE_CAP[type], v)
+	return v
 
 func upgrade_cost() -> int:
 	return PieceData.upgrade_cost(type, level)
@@ -53,22 +71,36 @@ func display_name() -> String:
 func info_text() -> String:
 	if slow > 0.0:
 		if dmg > 0.0:
-			return "slows %d%%   %d dmg/sec" % [int(slow * 100.0), int(dmg)]
+			return "slows %d%%   %s dmg/sec" % [int(slow * 100.0), GameState.abbrev(dmg)]
 		return "slows %d%%" % int(slow * 100.0)
 	if DOT_TYPE.has(type):
-		var s := "%s burn   %d dmg/sec" % [DOT_TYPE[type], int(dmg)]
+		var s := "%s burn   %s dmg/sec" % [DOT_TYPE[type], GameState.abbrev(dmg)]
 		if type == "poison_trap":
 			s += "   +%d%% damage taken" % int(_poison_vuln() * 100.0)
 		return s
 	if AOE_TYPES.has(type):
 		# Volcano: pulses every ERUPT_PERIOD seconds. Show per-pulse damage
 		# and the effective dps for clarity.
-		return "%d/pulse (~%.0f dps)   area %d   every %.1fs" % [
-			int(dmg), dmg / ERUPT_PERIOD, int(reach), ERUPT_PERIOD]
+		return "%s/pulse (~%s dps)   area %d   every %.1fs" % [
+			GameState.abbrev(dmg), GameState.abbrev(dmg / ERUPT_PERIOD), int(reach), ERUPT_PERIOD]
 	if type == "spike_trap":
-		return "%d dmg/s or %d%% max HP/s on contact" % [
-			int(dmg), int(_spike_pct() * 100.0)]
-	return "%d damage / sec" % int(dmg)
+		return "%s dmg/s or %d%% max HP/s on contact" % [
+			GameState.abbrev(dmg), int(_spike_pct() * 100.0)]
+	return "%s damage / sec" % GameState.abbrev(dmg)
+
+## Info-box 3rd line when an adjacent Amplifier is boosting this trap.
+func enhancement_text() -> String:
+	var amp := _amp()
+	if amp <= 0.0:
+		return ""
+	if slow > 0.0:
+		var eff := minf(PieceData.SLOW_BOOST_CAP, slow * (1.0 + amp))
+		return "Amplified  +%d%%   %s   slows %d%%" % [
+			int(round(amp * 100.0)), GameState.arrow(), int(round(eff * 100.0))]
+	if dmg > 0.0:
+		return "Amplified  +%d%%   %s   %s dmg" % [
+			int(round(amp * 100.0)), GameState.arrow(), GameState.abbrev(dmg * (1.0 + amp))]
+	return ""
 
 func _process(delta: float) -> void:
 	if GameState.game_over:
@@ -79,34 +111,39 @@ func _process(delta: float) -> void:
 		_process_contact(delta)
 
 ## Continuous contact damage: ticks every enemy currently touching the trap.
+## An adjacent Amplifier boosts the effect: slow toward SLOW_BOOST_CAP, damage
+## (flat, DoT, and Spike's %HP bleed) by the same fraction.
 func _process_contact(delta: float) -> void:
+	var amp := _amp()
+	var eff_slow := minf(PieceData.SLOW_BOOST_CAP, slow * (1.0 + amp))
+	var eff_dmg := dmg * (1.0 + amp)
 	for node in level_ref.enemies_near(position, reach):
 		var e := node as Enemy
 		if e == null or not e.is_alive():
 			continue
 		if slow > 0.0:
-			e.apply_slow(slow, 0.39)
+			e.apply_slow(eff_slow, 0.39)
 		if dmg > 0.0:
 			if DOT_TYPE.has(type):
 				var dt: String = DOT_TYPE[type]
 				# Poison / fire DoT lasts 1 extra second per upgrade level.
 				var dur: float = DOT_TIME[dt] + 1.0 * (level - 1)
-				e.apply_dot(dmg, dur, dt)
+				e.apply_dot(eff_dmg, dur, dt)
 				# Poison also makes the target vulnerable: it takes extra damage
 				# from all sources for the same duration (5% at L1, +1%/level,
 				# cap 50%; max-wins, no stacking).
 				if type == "poison_trap":
-					e.apply_vuln(_poison_vuln(), dur)
+					e.apply_vuln(_poison_vuln() * (1.0 + amp), dur)
 			elif type == "spike_trap":
 				# Spike: the larger of a small flat DPS (kills early trash) or a
 				# percent of the enemy's max HP per second (tracks any wave and
 				# punishes tanks). Halved vs bosses so a lane can't trivialize them.
-				var pct := _spike_pct()
+				var pct := _spike_pct() * (1.0 + amp)
 				if e.is_boss:
 					pct *= 0.5
-				e.take_damage(maxf(dmg, pct * e.max_health) * delta)
+				e.take_damage(maxf(eff_dmg, pct * e.max_health) * delta)
 			else:
-				e.take_damage(dmg * delta)
+				e.take_damage(eff_dmg * delta)
 
 ## Poison's vulnerability: target takes 5% more damage at L1, +1% per level,
 ## capped at 50% extra.
@@ -131,11 +168,12 @@ func _process_aoe(delta: float) -> void:
 	# Skip the expanding shock-wave animation when graphics are reduced.
 	if not reduced:
 		_erupt_flash = ERUPT_FLASH
-	for node in level_ref.enemies_near(position, reach):
+	var eff_dmg := dmg * (1.0 + _amp())
+	for node in level_ref.enemies_near(position, _boosted_reach()):
 		var e := node as Enemy
 		if e == null or not e.is_alive():
 			continue
-		e.take_damage(dmg)
+		e.take_damage(eff_dmg)
 	if not reduced:
 		queue_redraw()
 
@@ -165,13 +203,15 @@ func _draw() -> void:
 					Vector2(fx - 2.5, 8.0), Vector2(fx + 2.5, 8.0), Vector2(fx, -3.0)]),
 					Color(1.0, 0.86, 0.32))
 		"volcano_trap":
-			# Always-visible AOE outline so the player sees the damage zone.
-			draw_arc(Vector2.ZERO, reach, 0.0, TAU, 48,
+			# Always-visible AOE outline so the player sees the damage zone
+			# (grows with an adjacent Amplifier).
+			var dr := _boosted_reach()
+			draw_arc(Vector2.ZERO, dr, 0.0, TAU, 48,
 				Color(0.95, 0.45, 0.15, 0.22), 1.5)
 			# Expanding shock-wave ring during an eruption.
 			if _erupt_flash > 0.0:
 				var t := 1.0 - _erupt_flash / ERUPT_FLASH
-				var r := reach * (0.25 + 0.75 * t)
+				var r := dr * (0.25 + 0.75 * t)
 				draw_circle(Vector2.ZERO, r,
 					Color(1.0, 0.55, 0.15, 0.18 * (1.0 - t)))
 				draw_arc(Vector2.ZERO, r, 0.0, TAU, 48,

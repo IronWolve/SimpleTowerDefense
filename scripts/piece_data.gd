@@ -68,14 +68,14 @@ const TYPES := {
 	},
 	"tar_trap": {
 		"name": "Tar Trap", "short": "Tar", "category": "trap", "mode": "",
-		"cost": 40, "stock_key": "", "blocks": false,
+		"cost": 50, "stock_key": "", "blocks": false,
 		"color": Color(0.22, 0.22, 0.18),
-		"range": 0.0, "fire_rate": 0.0, "damage": 3.0,
+		"range": 0.0, "fire_rate": 0.0, "damage": 0.0,
 		"bullet_color": Color.WHITE, "slow": 0.05, "slow_time": 0.0, "aoe_radius": 0.0,
 	},
 	"spike_trap": {
 		"name": "Spike Trap", "short": "Spike", "category": "trap", "mode": "",
-		"cost": 45, "stock_key": "", "blocks": false,
+		"cost": 50, "stock_key": "", "blocks": false,
 		"color": Color(0.22, 0.22, 0.18),
 		"range": 0.0, "fire_rate": 0.0, "damage": 1.0,
 		"bullet_color": Color.WHITE, "slow": 0.0, "slow_time": 0.0, "aoe_radius": 0.0,
@@ -89,7 +89,7 @@ const TYPES := {
 	},
 	"fire_trap": {
 		"name": "Fire Trap", "short": "Fire", "category": "trap", "mode": "",
-		"cost": 55, "stock_key": "", "blocks": false,
+		"cost": 50, "stock_key": "", "blocks": false,
 		"color": Color(0.27, 0.16, 0.13),
 		"range": 0.0, "fire_rate": 0.0, "damage": 15.0,
 		"bullet_color": Color.WHITE, "slow": 0.0, "slow_time": 0.0, "aoe_radius": 0.0,
@@ -106,6 +106,26 @@ const TYPES := {
 ## Per-level fraction the support towers grant: Gold Mine adds this much to
 ## kill gold, Amplifier adds this much damage to each adjacent tower (0.5%/lvl).
 const SUPPORT_PCT_PER_LEVEL := 0.005
+
+## Slow effect tuning, shared by Ice (tower) and Tar (trap). A slow piece's
+## slow% climbs linearly from its base to SLOW_CAP, hitting the cap exactly at
+## SLOW_MAX_LEVEL. An adjacent Amplifier lifts the *effective* slow further at
+## runtime, up to SLOW_BOOST_CAP. Only the Amp can push a slow above SLOW_CAP.
+const SLOW_CAP := 0.80
+const SLOW_BOOST_CAP := 0.95
+const SLOW_MAX_LEVEL := 40
+
+## Coverage ceilings (absolute pixels, CELL = 40) so high levels / Amplifiers
+## can't blanket the whole map. Range and AOE stop growing here; damage, fire
+## rate and effects keep scaling. Reached at modest levels (L13-26).
+const RANGE_CAP := {
+	"tower": 360.0, "cannon": 320.0, "ice": 320.0,
+	"laser": 360.0, "missile": 440.0, "sniper": 600.0,
+}
+## Splash radius ceilings (also clamps the Amplifier's AOE boost).
+const AOE_CAP := {
+	"cannon": 120.0, "missile": 160.0, "volcano_trap": 120.0,
+}
 
 static func data(type: String) -> Dictionary:
 	return TYPES[type]
@@ -137,8 +157,13 @@ static func tower_stats(type: String, level: int) -> Dictionary:
 	if type == "cannon":
 		dmg_mult *= 1.05 * 1.05
 	d["damage"] = d["damage"] * pow(1.0 + dmg_step * n, dmg_exp) * dmg_mult
-	# Range bonus per level reduced 25% (was +20, now +15).
-	d["range"] = d["range"] + 15.0 * n
+	# Range bonus per level reduced 25% (was +20, now +15). Only pieces that
+	# actually have a range grow - support towers (Gold/Amp, base range 0) stay
+	# at 0 so they never sprout a meaningless range circle.
+	if d["range"] > 0.0:
+		d["range"] = d["range"] + 15.0 * n
+		if RANGE_CAP.has(type):
+			d["range"] = minf(RANGE_CAP[type], d["range"])
 	# Fire rate: per-tower rules.
 	if type == "tower":
 		# Bullet: base + 0.25 per level, capped at 4.0/s so high levels don't
@@ -151,21 +176,27 @@ static func tower_stats(type: String, level: int) -> Dictionary:
 	else:
 		# Ice / Laser / Cannon: gentle linear scaling.
 		d["fire_rate"] = d["fire_rate"] * (1.0 + 0.08 * n)
-	# Slow strength: scales +6% per level, cap 85%. (Ice base 5% reaches the
-	# cap by L15, so upgrades feel meaningful immediately.)
+	# Slow strength climbs linearly from its base to SLOW_CAP at SLOW_MAX_LEVEL
+	# (shared with Tar). An adjacent Amplifier lifts the effective slow further
+	# at runtime, up to SLOW_BOOST_CAP.
 	if d["slow"] > 0.0:
-		d["slow"] = minf(0.85, d["slow"] + 0.06 * n)
+		var base_slow: float = d["slow"]
+		var step := (SLOW_CAP - base_slow) / float(SLOW_MAX_LEVEL - 1)
+		d["slow"] = minf(SLOW_CAP, base_slow + step * n)
 	# Slow duration: +1s per level (replaces old 30% bump + 0.7s scaling).
 	if d["slow_time"] > 0.0:
 		d["slow_time"] = d["slow_time"] + 1.0 * n
 	# AOE radius (Cannon / Missile): grows with level as before.
 	if d["aoe_radius"] > 0.0:
 		d["aoe_radius"] = d["aoe_radius"] + 5.0 * n
+		if AOE_CAP.has(type):
+			d["aoe_radius"] = minf(AOE_CAP[type], d["aoe_radius"])
 	return d
 
 ## Effective stats for a trap at a given level (level 1 == base).
 ## Spike has its own linear damage scaling that tracks ~5% of wave-N enemy HP.
-## Tar caps at 95% slow. Volcano's AOE radius never grows past its base.
+## Tar is slow-only (no damage) and shares the slow curve: it reaches SLOW_CAP
+## at SLOW_MAX_LEVEL. Volcano's AOE radius never grows past its base.
 static func trap_stats(type: String, level: int) -> Dictionary:
 	var d: Dictionary = TYPES[type].duplicate(true)
 	var n := level - 1
@@ -177,11 +208,10 @@ static func trap_stats(type: String, level: int) -> Dictionary:
 	else:
 		d["damage"] = d["damage"] * pow(1.0 + 0.3 * n, 1.4)
 	if d["slow"] > 0.0:
-		if type == "tar_trap":
-			# Base 5%, +10%/level, capped 90% (reaches the cap at level 10).
-			d["slow"] = minf(0.90, d["slow"] + 0.10 * n)
-		else:
-			d["slow"] = minf(0.85, d["slow"] + 0.05 * n)
+		# Same linear-to-SLOW_CAP curve as Ice (see tower_stats).
+		var base_slow: float = d["slow"]
+		var step := (SLOW_CAP - base_slow) / float(SLOW_MAX_LEVEL - 1)
+		d["slow"] = minf(SLOW_CAP, base_slow + step * n)
 	# Volcano radius does NOT grow per level - stays at the base 1-cell-around.
 	return d
 

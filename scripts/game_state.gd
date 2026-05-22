@@ -16,6 +16,11 @@ var score := 0
 var game_over := false
 var stock := {"wall": STARTING_WALLS, "tower": STARTING_TOWERS}
 
+## Set to a save snapshot just before reload_current_scene() to resume a run
+## instead of starting fresh; main.gd and Level read it on the fresh scene.
+## Empty dictionary == start a normal new game.
+var pending_load := {}
+
 ## Persistent option (kept across Reset Game): grant lives per wave cleared.
 ## On by default; Hard mode in the options menu turns it off.
 var bonus_lives_per_wave := true
@@ -59,6 +64,31 @@ func reduced_gfx() -> bool:
 ## (the web build's fallback font can't render the Unicode arrow).
 func arrow() -> String:
 	return "->" if OS.has_feature("web") else "→"
+
+const _ABBREV_UNITS := ["K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp"]
+
+## Compact display for large numbers so long runs stay readable:
+## 850 -> "850", 12345 -> "12.3K", 4_500_000 -> "4.5M", 1.2e12 -> "1.2T".
+## Under 1000 it shows a plain integer; above, 3 significant digits + a suffix.
+func abbrev(value: float) -> String:
+	var neg := value < 0.0
+	var n := absf(value)
+	if n < 1000.0:
+		return ("-" if neg else "") + str(int(round(n)))
+	var mag := 0
+	while n >= 1000.0 and mag < _ABBREV_UNITS.size():
+		n /= 1000.0
+		mag += 1
+	var s: String
+	if n < 10.0:
+		s = "%.2f" % n
+	elif n < 100.0:
+		s = "%.1f" % n
+	else:
+		s = "%.0f" % n
+	if s.contains("."):
+		s = s.rstrip("0").rstrip(".")
+	return ("-" if neg else "") + s + _ABBREV_UNITS[mag - 1]
 
 func _ready() -> void:
 	load_settings()
@@ -179,6 +209,45 @@ func list_custom_maps() -> PackedStringArray:
 func _ensure_maps_dir() -> void:
 	if not DirAccess.dir_exists_absolute(MAPS_DIR):
 		DirAccess.make_dir_recursive_absolute(MAPS_DIR)
+
+## --- Save / load a run (JSON snapshot in user://). Two slots: "auto" (written
+## each wave clear) and "manual" (the in-game Save Game button). ---
+func _save_path(slot: String) -> String:
+	return "user://save_%s.json" % slot
+
+func has_save(slot: String) -> bool:
+	return FileAccess.file_exists(_save_path(slot))
+
+func write_save(slot: String, data: Dictionary) -> bool:
+	var f := FileAccess.open(_save_path(slot), FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_string(JSON.stringify(data))
+	f.close()
+	return true
+
+func read_save(slot: String) -> Dictionary:
+	if not has_save(slot):
+		return {}
+	var f := FileAccess.open(_save_path(slot), FileAccess.READ)
+	if f == null:
+		return {}
+	var txt := f.get_as_text()
+	f.close()
+	var parsed: Variant = JSON.parse_string(txt)
+	return parsed if parsed is Dictionary else {}
+
+## Restore the run-level economy from a save snapshot (board/pieces are rebuilt
+## by Level; wave counters by WaveManager). Called by main.gd on a load.
+func apply_run_state(data: Dictionary) -> void:
+	gold = int(data.get("gold", STARTING_GOLD))
+	lives = int(data.get("lives", STARTING_LIVES))
+	wave = int(data.get("wave", 0))
+	score = int(data.get("score", 0))
+	game_over = false
+	var st: Dictionary = data.get("stock", {})
+	stock = {"wall": int(st.get("wall", 0)), "tower": int(st.get("tower", 0))}
+	board_size = int(data.get("board_size", board_size))
 
 ## Wipe the persistent best wave / best score back to zero.
 func reset_best() -> void:

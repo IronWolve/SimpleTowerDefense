@@ -9,6 +9,9 @@ const COUNTDOWN := 10.0
 const BOSS_COUNTDOWN := 30.0
 ## Inter-wave timer when the round-timer option is on (non-boss rounds).
 const LONG_COUNTDOWN := 30.0
+## Alt-send releases its queued waves on this brisk fixed cadence (independent
+## of the normal countdown / Auto) so 10 waves stream out fast, one at a time.
+const QUEUE_INTERVAL := 0.5
 
 ## Enemy archetypes that mix into normal waves (boss waves spawn their own).
 ## hp / spd / reward are multipliers on the wave's base stats. The "weight"
@@ -48,9 +51,33 @@ var _started := 0
 var _jobs: Array = []
 var _countdown := -1.0
 var _bonus_lives_through := 0
+## Alt-send queue: extra waves still to auto-fire after the immediate one, on
+## QUEUE_INTERVAL cadence. Lets "send 10" stream out instead of stacking at once.
+var _queued_sends := 0
+var _queue_timer := 0.0
 
 func waves_started() -> int:
 	return _started
+
+func bonus_lives_through() -> int:
+	return _bonus_lives_through
+
+## True when nothing is spawning and no enemies are alive - i.e. between waves,
+## the only time a manual Save is allowed (we don't serialize live enemies).
+func is_field_clear() -> bool:
+	return _jobs.is_empty() and get_tree().get_nodes_in_group("enemies").is_empty()
+
+## Restore wave progress from a save. The field loads empty, so there's no
+## active countdown or spawn jobs.
+func restore_state(started: int, auto: bool, bonus_through: int) -> void:
+	_started = started
+	GameState.wave = started
+	auto_advance = auto
+	_bonus_lives_through = bonus_through
+	_countdown = -1.0
+	_queued_sends = 0
+	_jobs.clear()
+	Events.wave_changed.emit(_started)
 
 func next_is_boss() -> bool:
 	return _boss_count(_started + 1) > 0
@@ -92,11 +119,31 @@ func send_bonus() -> int:
 func can_start_wave() -> bool:
 	return not GameState.game_over and level != null and level.has_path()
 
-func start_next_wave() -> void:
+## Alt-send: launch the next wave now, then auto-fire the following ones one at
+## a time as each wave's countdown elapses, up to `n` total. Spaced like normal
+## pacing - unlike clicking n times, which would stack n waves simultaneously.
+func send_waves(n: int) -> void:
 	if not can_start_wave():
 		return
-	# Reward sending a non-boss wave early - scaled bonus from send_bonus().
-	var bonus := send_bonus()
+	start_next_wave(true)
+	_queued_sends = maxi(0, n - 1)
+	_queue_timer = QUEUE_INTERVAL
+
+## Bonus an Alt-sent wave pays: the maximum early-send bonus (full timer's worth)
+## regardless of the live countdown, since Alt-send fires near-instantly. 0 on
+## boss waves or when the round-timer option is off.
+func _max_send_bonus() -> int:
+	if not GameState.round_timer_bonus or next_is_boss():
+		return 0
+	var mult := 1.0 + 0.02 * _started
+	return int(ceil(LONG_COUNTDOWN) * mult)
+
+func start_next_wave(max_bonus := false) -> void:
+	if not can_start_wave():
+		return
+	# Reward sending a non-boss wave early - full bonus for Alt-send, else the
+	# live countdown's worth from send_bonus().
+	var bonus := _max_send_bonus() if max_bonus else send_bonus()
 	if bonus > 0:
 		GameState.add_gold(bonus)
 	_started += 1
@@ -209,7 +256,24 @@ func _process(delta: float) -> void:
 	var cleared := _jobs.is_empty() \
 		and get_tree().get_nodes_in_group("enemies").is_empty()
 	_check_wave_bonus(cleared)
+	_tick_queue(delta)
 	_tick_countdown(delta, cleared)
+
+## Alt-send burst: release one queued wave every QUEUE_INTERVAL seconds, on its
+## own timer so it works the same whether Auto is on or off. Abandons the queue
+## if the path gets blocked or the game ends.
+func _tick_queue(delta: float) -> void:
+	if _queued_sends <= 0:
+		return
+	if not can_start_wave():
+		_queued_sends = 0
+		return
+	_queue_timer -= delta
+	if _queue_timer > 0.0:
+		return
+	_queue_timer = QUEUE_INTERVAL
+	_queued_sends -= 1
+	start_next_wave(true)
 
 ## Grants lives per wave cleared, scaling with the wave number (when enabled).
 func _check_wave_bonus(cleared: bool) -> void:
@@ -220,6 +284,9 @@ func _check_wave_bonus(cleared: bool) -> void:
 				gained += w
 			GameState.add_lives(gained)
 		_bonus_lives_through = _started
+		# A wave just cleared and the field is empty - auto-save the run.
+		if level != null and _started >= 1 and not GameState.game_over:
+			level.autosave()
 
 func _tick_countdown(delta: float, _cleared: bool) -> void:
 	if _countdown <= 0.0:

@@ -5,15 +5,15 @@ extends CanvasLayer
 
 const BAR_Y := 600.0
 const APP_NAME := "Simple Tower Defense"
-const APP_VERSION := "v34"
+const APP_VERSION := "v38"
 const BUY_TYPES := ["tower", "ice", "laser", "cannon", "sniper", "missile",
 	"gold", "amplifier",
-	"wall", "tar_trap", "spike_trap", "poison_trap", "fire_trap", "volcano_trap"]
+	"wall", "tar_trap", "poison_trap", "fire_trap", "spike_trap", "volcano_trap"]
 const SPEEDS := [0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 20.0, 50.0, 100.0]
 const _H := "[font_size=17][color=#99a3d1][b]"
 const _HE := "[/b][/color][/font_size]\n"
 const HELP_TEXT := _H + "Controls" + _HE + \
-"""Mouse wheel zooms; hold middle button and drag to pan when zoomed in. Speed button: left-click faster, right-click slower (1/4x to 100x). Pause freezes the game. Hold Alt and drag with any piece selected to place (or remove walls) in a straight line. Alt + left-click a placed turret upgrades it ten levels at once (stops when gold runs out).
+"""Mouse wheel zooms; hold middle button and drag to pan when zoomed in. Speed button: left-click faster, right-click slower (1/4x to 100x). Pause freezes the game. Hold Alt and drag with any piece selected to place (or remove walls) in a straight line. Alt + left-click a placed turret upgrades it ten levels at once (stops when gold runs out). Alt + Send Wave (or Alt+Enter) queues the next 10 waves, fired one at a time.
 
 [b]Keys:[/b] Space pauses, Enter sends the next wave, +/- adjusts speed, Esc toggles Options (or closes Help).
 
@@ -42,15 +42,15 @@ const HELP_TEXT := _H + "Controls" + _HE + \
 """[b]Bullet[/b]   15 dmg @ 1.0/s    ->   109 dmg @ 3.25/s   (rate caps at 4.0/s)
 [b]Cannon[/b]   31 dmg @ 0.75/s, AOE 56   ->   223 dmg @ 1.29/s, AOE 101
 [b]Laser[/b]    39 dmg, beam, single target   ->   286 dmg, beam, single target
-[b]Ice[/b]      AOE @ 0.6/s: 5% slow 2.6s   ->   @ 1.0/s: 59% slow 11.6s   (no damage)
+[b]Ice[/b]      AOE: 5% slow 2.6s   ->   ~22% slow 11.6s @ L10   (no damage; slow climbs to 80% by L40, up to 95% next to an Amplifier)
 [b]Sniper[/b]   162 dmg @ 1.0/s   ->   1 762 dmg @ 1.0/s   (rate x2 / 30 lvl)
 [b]Missile[/b]  60 dmg @ 1.0/s, AOE 82   ->   436 dmg @ 1.0/s, AOE 127   (rate x2 / 30 lvl)
 
 """ + _H + "Trap Stats   (Level 1 -> Level 10)" + _HE + \
-"""[b]Tar[/b]       slow 5% for as long as the enemy is on it   ->   slow 90% (cap at L10), +10%/level
-[b]Spike[/b]     contact: 2 dps or 0.8%/s of max HP   ->   20 dps or 8%/s   (cap 12%/s; halved vs bosses)
+"""[b]Tar[/b]       no damage, pure slow: 5% while stood on   ->   ~22% @ L10, climbing to 80% at L40 (max); up to 95% next to an Amplifier
 [b]Poison[/b]    8 dps DoT for 3.9 s, +5% dmg taken   ->   79 dps for 12.9 s, +14% dmg taken   (+1 s & +1%/level)
 [b]Fire[/b]      15 dps DoT for 1.95 s after stepping on it   ->   148 dps for 10.95 s   (+1 s / level)
+[b]Spike[/b]     contact: 2 dps or 0.8%/s of max HP   ->   20 dps or 8%/s   (cap 12%/s; halved vs bosses)
 [b]Volcano[/b]   erupts every 0.8 s, 19 dmg per pulse, AOE 60 (3x3 cells, fixed)   ->   188 dmg per pulse"""
 
 var wave_manager: WaveManager
@@ -71,7 +71,7 @@ var _undo_button: Button
 var _speed_button: Button
 var _auto_button: Button
 var _newgame_button: Button
-var _board_button: Button
+var _board_select: OptionButton
 var _map_select: OptionButton
 var _map_name_input: LineEdit
 var _save_map_button: Button
@@ -215,7 +215,7 @@ func _on_reset_options_pressed() -> void:
 	_walls_toggle.set_pressed_no_signal(false)
 	_lives_toggle.set_pressed_no_signal(false)
 	_drag_toggle.set_pressed_no_signal(true)
-	_board_button.text = "Board size:  " + _board_name()
+	_board_select.select(0)
 	GameState.save_settings()
 	_refresh_stats()
 	_refresh_buy_buttons()
@@ -376,7 +376,7 @@ func _build_options() -> void:
 	_options_root.add_child(panel)
 
 	var app_name := Label.new()
-	app_name.text = "2026 - %s by IronWolve" % APP_NAME
+	app_name.text = "2026 - %s" % APP_NAME
 	app_name.position = Vector2(0, 4)
 	app_name.size = Vector2(460, 18)
 	app_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -391,6 +391,15 @@ func _build_options() -> void:
 	ver_label.add_theme_color_override("font_color", Color(0.62, 0.66, 0.82))
 	panel.add_child(ver_label)
 
+	var author_label := Label.new()
+	author_label.text = "By IronWolve"
+	author_label.position = Vector2(0, 4)
+	author_label.size = Vector2(452, 18)
+	author_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	author_label.add_theme_font_size_override("font_size", 11)
+	author_label.add_theme_color_override("font_color", Color(0.62, 0.66, 0.82))
+	panel.add_child(author_label)
+
 	var title := Label.new()
 	title.text = "Options"
 	title.position = Vector2(0, 22)
@@ -399,23 +408,39 @@ func _build_options() -> void:
 	title.add_theme_font_size_override("font_size", 26)
 	panel.add_child(title)
 
-	var help_btn := _make_button("Help  /  How to Play", Vector2(110, 58), Vector2(240, 42), 17)
+	var help_btn := _make_button("Help", Vector2(20, 58), Vector2(130, 42), 16)
 	help_btn.pressed.connect(_on_help_pressed)
 	panel.add_child(help_btn)
-
-	_board_button = _make_button("Board size:  " + _board_name(),
-		Vector2(110, 112), Vector2(240, 42), 16)
-	_board_button.pressed.connect(_on_board_pressed)
-	panel.add_child(_board_button)
+	var save_btn := _make_button("Save Game", Vector2(158, 58), Vector2(140, 42), 15)
+	save_btn.pressed.connect(_on_save_game_pressed)
+	panel.add_child(save_btn)
+	var load_btn := _make_button("Load Game", Vector2(306, 58), Vector2(140, 42), 15)
+	load_btn.pressed.connect(_on_load_game_pressed)
+	panel.add_child(load_btn)
 
 	# New Game restarts the run; Reset Options restores every toggle to default.
-	_newgame_button = _make_button("New Game", Vector2(20, 166), Vector2(200, 42), 16)
+	_newgame_button = _make_button("New Game", Vector2(20, 112), Vector2(200, 42), 16)
 	_newgame_button.pressed.connect(_on_new_game_pressed)
 	panel.add_child(_newgame_button)
 
-	var reset_btn := _make_button("Reset Options", Vector2(240, 166), Vector2(200, 42), 16)
+	var reset_btn := _make_button("Reset Options", Vector2(240, 112), Vector2(200, 42), 16)
 	reset_btn.pressed.connect(_on_reset_options_pressed)
 	panel.add_child(reset_btn)
+
+	var board_label := Label.new()
+	board_label.text = "Board size"
+	board_label.position = Vector2(20, 176)
+	board_label.add_theme_font_size_override("font_size", 16)
+	panel.add_child(board_label)
+	_board_select = OptionButton.new()
+	_board_select.position = Vector2(130, 166)
+	_board_select.size = Vector2(220, 42)
+	_board_select.add_theme_font_size_override("font_size", 16)
+	for i in range(Level.BOARD_SIZES.size()):
+		_board_select.add_item(_board_item_text(i), i)
+	_board_select.select(GameState.board_size)
+	_board_select.item_selected.connect(_on_board_selected)
+	panel.add_child(_board_select)
 
 	# Group 1: only takes effect when a new game starts.
 	panel.add_child(_make_section("NEW GAME   (applies on New Game)", Vector2(32, 230)))
@@ -567,10 +592,10 @@ func _refresh_stats_page() -> void:
 	var rows: Array = [
 		{"head": "Records"},
 		{"k": "Best wave",         "v": str(GameState.best_wave)},
-		{"k": "Best score",        "v": _fmt_int(GameState.best_score)},
+		{"k": "Best score",        "v": GameState.abbrev(GameState.best_score)},
 		{"k": "Highest tower lvl", "v": str(GameState.best_tower_level)},
 		{"head": "Totals"},
-		{"k": "Enemies killed",    "v": _fmt_int(GameState.total_kills)},
+		{"k": "Enemies killed",    "v": GameState.abbrev(GameState.total_kills)},
 		{"k": "Games played",      "v": str(GameState.total_games)},
 		{"k": "Time played",       "v": _fmt_play_time(GameState.total_play_seconds)},
 		{"head": "Dates"},
@@ -587,7 +612,7 @@ func _refresh_stats_page() -> void:
 			else "[color=#8cff8c]Normal[/color]")},
 		{"head": "World"},
 		{"k": "Map",   "v": _map_display_name(GameState.map_type)},
-		{"k": "Board", "v": _board_name()},
+		{"k": "Board", "v": _board_item_text(GameState.board_size)},
 		{"head": "Modifiers"},
 		{"k": "Round timer",    "v": on.call(GameState.round_timer_bonus)},
 		{"k": "Drag-draw walls","v": on.call(GameState.drag_draw_walls)},
@@ -618,21 +643,6 @@ func _map_display_name(key: String) -> String:
 			if key.begins_with("custom:"):
 				return key.substr(7)
 			return key
-
-func _fmt_int(n: int) -> String:
-	# 12345 -> "12,345"
-	var s := str(n)
-	var neg := s.begins_with("-")
-	if neg:
-		s = s.substr(1)
-	var out := ""
-	var c := 0
-	for i in range(s.length() - 1, -1, -1):
-		out = s[i] + out
-		c += 1
-		if c % 3 == 0 and i > 0:
-			out = "," + out
-	return ("-" + out) if neg else out
 
 func _fmt_play_time(secs: float) -> String:
 	var t := int(secs)
@@ -673,6 +683,37 @@ func _make_toggle(text: String, pos: Vector2, on: bool, cb: Callable) -> CheckBu
 
 func _on_options_pressed() -> void:
 	_set_options_visible(not _options_root.visible)
+
+## Manual save (Options). Only allowed between waves - we don't serialize live
+## enemies, so loading always resumes at the start of a wave with the field clear.
+func _on_save_game_pressed() -> void:
+	if GameState.game_over:
+		show_toast("Can't save after game over", 3.0)
+		return
+	if wave_manager != null and not wave_manager.is_field_clear():
+		show_toast("Finish the current wave before saving", 3.0)
+		return
+	if level != null and GameState.write_save("manual", level.serialize_run()):
+		show_toast("Game saved", 2.0)
+	else:
+		show_toast("Save failed", 3.0)
+
+func _on_load_game_pressed() -> void:
+	_load_slot("manual")
+
+func _on_continue_pressed() -> void:
+	_load_slot("auto")
+
+## Reload the scene resuming a save slot; main.gd applies GameState.pending_load.
+func _load_slot(slot: String) -> void:
+	var data := GameState.read_save(slot)
+	if data.is_empty():
+		show_toast("No saved game found", 3.0)
+		return
+	GameState.pending_load = data
+	Engine.time_scale = 1.0
+	get_tree().paused = false
+	get_tree().reload_current_scene()
 
 ## Show/hide the options menu; the game pauses while it is open.
 func _set_options_visible(v: bool) -> void:
@@ -720,16 +761,15 @@ func _on_lives_toggled(pressed: bool) -> void:
 	GameState.save_settings()
 	_refresh_stats()
 
-func _board_name() -> String:
-	var dim: Vector2i = Level.BOARD_SIZES[GameState.board_size]
+## Dropdown label for board size option `i`, e.g. "Normal  28x16".
+func _board_item_text(i: int) -> String:
+	var dim: Vector2i = Level.BOARD_SIZES[i]
 	# Width x Height.
-	return "%s  %dx%d" % [["Normal", "Large", "Huge"][GameState.board_size],
-		dim.x, dim.y]
+	return "%s  %dx%d" % [["Normal", "Large", "Huge"][i], dim.x, dim.y]
 
-func _on_board_pressed() -> void:
-	GameState.board_size = (GameState.board_size + 1) % 3
+func _on_board_selected(idx: int) -> void:
+	GameState.board_size = idx
 	GameState.save_settings()
-	_board_button.text = "Board size:  " + _board_name()
 
 func _on_map_selected(idx: int) -> void:
 	GameState.map_type = _map_type_for(idx)
@@ -848,11 +888,11 @@ func _connect_events() -> void:
 	Events.game_over.connect(func(): dismiss_popup(); _update_start())
 
 func _refresh_stats() -> void:
-	_gold_label.text = "Gold:  unlimited" if GameState.unlimited_money else "Gold:  %d" % GameState.gold
+	_gold_label.text = "Gold:  unlimited" if GameState.unlimited_money else "Gold:  %s" % GameState.abbrev(GameState.gold)
 	_lives_label.text = "Lives:  unlimited" if GameState.unlimited_lives \
 		else "Lives:  %d" % GameState.lives
 	_wave_label.text = "Wave:  %d" % GameState.wave
-	_score_label.text = "Score:  %d" % GameState.score
+	_score_label.text = "Score:  %s" % GameState.abbrev(GameState.score)
 
 func _refresh_buy_buttons() -> void:
 	for t in BUY_TYPES:
@@ -870,10 +910,9 @@ func _refresh_buy_buttons() -> void:
 ## tower is being amplified) an enhancement line.
 func _structure_info_text(s: Structure) -> String:
 	var txt := "%s\n%s" % [s.display_name(), s.info_text()]
-	if s is Tower:
-		var enh: String = (s as Tower).enhancement_text()
-		if enh != "":
-			txt += "\n" + enh
+	var enh := s.enhancement_text()
+	if enh != "":
+		txt += "\n" + enh
 	return txt
 
 func _update_info() -> void:
@@ -915,11 +954,12 @@ func _update_wave_info() -> void:
 	var total := int(d.get("total_reward", 0))
 	# With Gold Mines on the board, also show the gold-enhanced total.
 	var bonus := level.gold_bonus() if level != null else 0.0
-	var gold_str := "$%d total" % total
+	var gold_str := "$%s total" % GameState.abbrev(total)
 	if bonus > 0.0:
-		gold_str = "Wave $%d / Enhanced $%d" % [total, int(round(total * (1.0 + bonus)))]
-	_wave_info_label.text = "Next - %s:   %d HP   %d enemies   %s" % [
-		tag, int(d["hp"]), int(d["count"]), gold_str]
+		gold_str = "Wave $%s / Enhanced $%s" % [
+			GameState.abbrev(total), GameState.abbrev(total * (1.0 + bonus))]
+	_wave_info_label.text = "Next - %s:   %s HP   %d enemies   %s" % [
+		tag, GameState.abbrev(d["hp"]), int(d["count"]), gold_str]
 	var ents := []
 	for t in WaveManager.ENEMY_TYPES:
 		ents.append({"shape": t["shape"], "color": t["color"],
@@ -1070,8 +1110,19 @@ func _refresh_popup() -> void:
 		dismiss_popup()
 		return
 	if _popup_action == "upgrade":
+		if not s.can_upgrade():
+			# Maxed out (e.g. Tar at the slow cap) - nothing left to buy.
+			_popup.text = "Max Level\n(slow cap)"
+			_popup.disabled = true
+			_popup.add_theme_color_override("font_color", Color(0.92, 0.94, 0.98))
+			_popup.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 1.0))
+			_popup.custom_minimum_size = Vector2.ZERO
+			_popup.size = Vector2.ZERO
+			_popup.reset_size()
+			_reposition_popup()
+			return
 		var c: int = s.upgrade_cost()
-		_popup.text = "Upgrade $%d\n%s" % [c, _dps_delta_text(s)]
+		_popup.text = "Upgrade $%s\n%s" % [GameState.abbrev(c), _dps_delta_text(s)]
 		var affordable := GameState.can_afford(c)
 		_popup.disabled = not affordable
 		# Green when you can buy it; default near-white otherwise (disabled
@@ -1082,7 +1133,7 @@ func _refresh_popup() -> void:
 			Color(0.70, 1.0, 0.70) if affordable else Color(1.0, 1.0, 1.0))
 	else:
 		if s.gold_invested > 0:
-			_popup.text = "Sell\n+$%d" % s.sell_refund()
+			_popup.text = "Sell\n+$%s" % GameState.abbrev(s.sell_refund())
 		else:
 			_popup.text = "Sell\n(return)"
 		_popup.disabled = false
@@ -1117,7 +1168,7 @@ func _dps_delta_text(s: Structure) -> String:
 	var nxt := _dps_at(s, s.level + 1)
 	if now <= 0.0 and nxt <= 0.0:
 		return ""
-	return "DPS %d %s %d" % [int(round(now)), _arrow(), int(round(nxt))]
+	return "DPS %s %s %s" % [GameState.abbrev(now), _arrow(), GameState.abbrev(nxt)]
 
 func _dps_at(s: Structure, level: int) -> float:
 	var cat: String = PieceData.category(s.type)
@@ -1154,7 +1205,12 @@ func popup_activate() -> void:
 
 func _on_start_pressed() -> void:
 	if wave_manager != null:
-		wave_manager.start_next_wave()
+		# Hold Alt to queue the next 10 waves; they fire one at a time as each
+		# wave's countdown elapses (not all stacked at once).
+		if Input.is_key_pressed(KEY_ALT):
+			wave_manager.send_waves(10)
+		else:
+			wave_manager.start_next_wave()
 	_update_start()
 
 func _on_pause_pressed() -> void:
@@ -1193,14 +1249,24 @@ func show_end_screen() -> void:
 	vbox.add_child(title)
 
 	var sub := Label.new()
-	var sub_text := "Reached wave %d        Final score: %d" % [GameState.wave, GameState.score]
+	var sub_text := "Reached wave %d        Final score: %s" % [
+		GameState.wave, GameState.abbrev(GameState.score)]
 	if GameState.best_wave > 0 or GameState.best_score > 0:
-		sub_text += "\nBest:  wave %d   /   score %d" % [
-			GameState.best_wave, GameState.best_score]
+		sub_text += "\nBest:  wave %d   /   score %s" % [
+			GameState.best_wave, GameState.abbrev(GameState.best_score)]
 	sub.text = sub_text
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sub.add_theme_font_size_override("font_size", 24)
 	vbox.add_child(sub)
+
+	# Continue resumes the auto-save from the last cleared wave (a second chance).
+	if GameState.has_save("auto"):
+		var cont := Button.new()
+		cont.text = "Continue (last save)"
+		cont.custom_minimum_size = Vector2(260, 64)
+		cont.add_theme_font_size_override("font_size", 24)
+		cont.pressed.connect(_on_continue_pressed)
+		vbox.add_child(cont)
 
 	var restart := Button.new()
 	restart.text = "Restart"

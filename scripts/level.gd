@@ -80,14 +80,19 @@ func _ready() -> void:
 	_overlay.level = self
 	add_child(_overlay)
 	Events.piece_selected.connect(_on_piece_selected)
-	match GameState.map_type:
-		"spiral":
-			_build_spiral()
-		"generate":
-			_build_generated_map()
-		_:
-			if GameState.map_type.begins_with("custom:"):
-				_build_custom_map(GameState.map_type.substr(7))
+	if not GameState.pending_load.is_empty():
+		# Resuming a saved run: rebuild the exact board from the snapshot's pieces
+		# (which include map walls) instead of generating a fresh map.
+		_load_pieces(GameState.pending_load)
+	else:
+		match GameState.map_type:
+			"spiral":
+				_build_spiral()
+			"generate":
+				_build_generated_map()
+			_:
+				if GameState.map_type.begins_with("custom:"):
+					_build_custom_map(GameState.map_type.substr(7))
 	_setup_zoom()
 	_update_preview()
 
@@ -108,7 +113,10 @@ func _build_custom_map(map_name: String) -> void:
 	for r in range(ROWS):
 		var line: String = grid[r]
 		for c in range(COLS):
-			if line[c] == "1":
+			# Guard against ragged rows: the size check above only validates the
+			# first row's width, so a short later row would index out of bounds.
+			# A missing char counts as "0" (open).
+			if c < line.length() and line[c] == "1":
 				_place_map_wall(Vector2i(c, r))
 
 ## Alt-click bulk upgrade: tries to upgrade the structure up to 10 times,
@@ -143,6 +151,70 @@ func dump_walls_grid() -> Array[String]:
 			line += "1" if has_wall else "0"
 		grid.append(line)
 	return grid
+
+## Snapshot the whole run for save/load: board + every placed piece + economy +
+## wave state. Live enemies/bullets are NOT saved (snapshots are between waves).
+func serialize_run() -> Dictionary:
+	var wm: WaveManager = hud.wave_manager if hud != null else null
+	var pieces: Array = []
+	for cell in _pieces:
+		var s: Structure = _pieces[cell]
+		if s == null:
+			continue
+		pieces.append({
+			"t": s.type, "x": cell.x, "y": cell.y,
+			"lvl": s.level, "inv": s.gold_invested, "stock": s.from_stock,
+			"under": _under_walls.has(cell),
+		})
+	return {
+		"v": 1,
+		"board_size": GameState.board_size,
+		"spawn": [spawn_cell.x, spawn_cell.y],
+		"base": [base_cell.x, base_cell.y],
+		"gold": GameState.gold, "lives": GameState.lives,
+		"wave": GameState.wave, "score": GameState.score,
+		"stock": {"wall": GameState.stock_of("wall"), "tower": GameState.stock_of("tower")},
+		"auto": wm.auto_advance if wm != null else true,
+		"started": wm.waves_started() if wm != null else GameState.wave,
+		"bonus_through": wm.bonus_lives_through() if wm != null else 0,
+		"pieces": pieces,
+	}
+
+## Write the auto-save slot (called by WaveManager on each wave clear).
+func autosave() -> void:
+	GameState.write_save("auto", serialize_run())
+
+## Rebuild the board from a save snapshot: place every piece at its cell/level,
+## restore tucked-under walls, set spawn/base, then recompute paths.
+func _load_pieces(data: Dictionary) -> void:
+	var sp: Array = data.get("spawn", [0, ROWS / 2])
+	var bs: Array = data.get("base", [COLS - 1, ROWS / 2])
+	spawn_cell = Vector2i(int(sp[0]), int(sp[1]))
+	base_cell = Vector2i(int(bs[0]), int(bs[1]))
+	for pd in data.get("pieces", []):
+		var t: String = pd.get("t", "")
+		if not PieceData.TYPES.has(t):
+			continue
+		var c := Vector2i(int(pd.get("x", 0)), int(pd.get("y", 0)))
+		# A tower saved sitting on a wall: restore the wall underneath first.
+		if bool(pd.get("under", false)) and PieceData.category(t) == "tower":
+			var w := Wall.new()
+			w.position = cell_center(c)
+			w.cell = c
+			walls.add_child(w)
+			w.setup_piece("wall", self, true)
+			_under_walls[c] = w
+		var s := _make_piece(t)
+		s.position = cell_center(c)
+		s.cell = c
+		_container_for(t).add_child(s)
+		s.setup_piece(t, self, bool(pd.get("stock", false)))
+		s.level = int(pd.get("lvl", 1))
+		s.gold_invested = int(pd.get("inv", 0))
+		s._apply_stats()
+		s.queue_redraw()
+		_pieces[c] = s
+	_recompute_paths_now()
 
 ## Drop one wall at a cell, skipping spawn / base / already-occupied.
 func _place_map_wall(c: Vector2i) -> void:
@@ -955,6 +1027,9 @@ func _on_click(pos: Vector2, is_right: bool) -> void:
 	# attempt ten upgrades at once (always available; stops when gold runs out).
 	if existing is Tower or existing is Trap:
 		if Input.is_key_pressed(KEY_ALT):
+			# Select first so the piece (and its range circle) redraws with the
+			# new stats after the bulk upgrade, just like a normal upgrade.
+			_select_structure(existing)
 			_alt_upgrade_ten(existing)
 			return
 		_select_structure(existing)

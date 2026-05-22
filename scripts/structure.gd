@@ -41,6 +41,11 @@ func display_name() -> String:
 func info_text() -> String:
 	return ""
 
+## Optional 3rd info-box line describing an adjacent-Amplifier boost ("" when
+## not amplified / not applicable). Overridden by Tower and Trap.
+func enhancement_text() -> String:
+	return ""
+
 func set_selected(value: bool) -> void:
 	selected = value
 	queue_redraw()

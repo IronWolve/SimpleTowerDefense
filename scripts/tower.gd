@@ -54,14 +54,14 @@ func info_text() -> String:
 		return "gold from kills +%.1f%%   (all Gold Mines total +%.1f%%)" % [
 			_support_pct() * 100.0, board_total]
 	if type == "amplifier":
-		return "+%.1f%% damage to the 8 towers touching it (stacks with other amps)" % (_support_pct() * 100.0)
+		return "+%.1f%% to the 8 pieces touching it: damage, slow, DoT, gold (stacks with other amps)" % (_support_pct() * 100.0)
 	if mode == "beam":
-		return "beam   %d dmg/sec   range %d   single target" % [
-			int(damage), int(range_radius)]
+		return "beam   %s dmg/sec   range %d   single target" % [
+			GameState.abbrev(damage), int(range_radius)]
 	if mode == "slow":
 		return "AOE slow %d%% for %.1fs   range %d   %.1f/s" % [
 			int(slow * 100.0), slow_time, int(range_radius), fire_rate]
-	var t := "range %d   dmg %d   %.1f/s" % [int(range_radius), int(damage), fire_rate]
+	var t := "range %d   dmg %s   %.1f/s" % [int(range_radius), GameState.abbrev(damage), fire_rate]
 	if aoe_radius > 0.0:
 		t += "   AOE %d" % int(aoe_radius)
 	if slow > 0.0:
@@ -113,11 +113,16 @@ func enhancement_text() -> String:
 		var amp := minf(Level.GOLD_AMP_CAP, b)
 		return "Amplified  +%d%%   %s   gold +%.1f%%" % [
 			int(round(amp * 100.0)), GameState.arrow(), _support_pct() * (1.0 + amp) * 100.0]
+	if mode == "slow":
+		# Ice: amp lifts the chill toward SLOW_BOOST_CAP.
+		var eff := minf(PieceData.SLOW_BOOST_CAP, slow * (1.0 + b))
+		return "Amplified  +%d%%   %s   slows %d%%" % [
+			int(round(b * 100.0)), GameState.arrow(), int(round(eff * 100.0))]
 	if mode != "shot" and mode != "beam":
 		return ""
 	var unit := "dmg/s" if mode == "beam" else "dmg"
-	return "Amplified  +%d%%   %s   %d %s" % [
-		int(round(b * 100.0)), GameState.arrow(), int(round(damage * (1.0 + b))), unit]
+	return "Amplified  +%d%%   %s   %s %s" % [
+		int(round(b * 100.0)), GameState.arrow(), GameState.abbrev(damage * (1.0 + b)), unit]
 
 ## Damage after applying any adjacent Amplifier towers' boost.
 func _boosted_damage() -> float:
@@ -125,11 +130,24 @@ func _boosted_damage() -> float:
 		return damage
 	return damage * (1.0 + level_ref.amplifier_bonus_at(cell))
 
+## AOE splash radius after adjacent-Amplifier boost. Unchanged for non-AOE
+## towers (aoe_radius 0), so Gold/Amp/single-target towers are unaffected.
+func _boosted_aoe() -> float:
+	if level_ref == null or aoe_radius <= 0.0:
+		return aoe_radius
+	var v := aoe_radius * (1.0 + level_ref.amplifier_bonus_at(cell))
+	if PieceData.AOE_CAP.has(type):
+		return minf(PieceData.AOE_CAP[type], v)
+	return v
+
 ## Ice tower: every interval, chill every enemy in range at once. No firing
 ## visual - the slow status icon on enemies is the only feedback (no flicker).
 func _process_slow(delta: float) -> void:
 	_cooldown -= delta
 	var pulses := 0
+	# Adjacent Amplifiers lift the chill toward SLOW_BOOST_CAP.
+	var amp := level_ref.amplifier_bonus_at(cell) if level_ref != null else 0.0
+	var eff_slow := minf(PieceData.SLOW_BOOST_CAP, slow * (1.0 + amp))
 	while _cooldown <= 0.0 and pulses < 12:
 		var targets := _acquire_slow_targets()
 		if targets.is_empty():
@@ -138,7 +156,7 @@ func _process_slow(delta: float) -> void:
 		for node in targets:
 			var e := node as Enemy
 			# Ice only slows - no direct damage, no cripple (single status icon).
-			e.apply_slow(slow, slow_time)
+			e.apply_slow(eff_slow, slow_time)
 		_cooldown += 1.0 / fire_rate
 		pulses += 1
 
@@ -181,7 +199,7 @@ func _fire(target: Enemy) -> void:
 		return
 	var b := Bullet.new()
 	b.position = position
-	b.setup(target, _boosted_damage(), bullet_color, slow, slow_time, aoe_radius)
+	b.setup(target, _boosted_damage(), bullet_color, slow, slow_time, _boosted_aoe())
 	b.retarget = type == "missile"
 	b.style = BULLET_STYLE.get(type, "bullet")
 	b.level_ref = level_ref
@@ -193,12 +211,13 @@ func _direct_hit(target: Enemy) -> void:
 	if target == null or not is_instance_valid(target) or not target.is_alive():
 		return
 	var dmg := _boosted_damage()
-	if aoe_radius > 0.0:
-		for node in level_ref.enemies_near(target.position, aoe_radius):
+	var aoe := _boosted_aoe()
+	if aoe > 0.0:
+		for node in level_ref.enemies_near(target.position, aoe):
 			var e := node as Enemy
 			if e == null or not e.is_alive():
 				continue
-			if target.position.distance_to(e.position) <= aoe_radius:
+			if target.position.distance_to(e.position) <= aoe:
 				e.take_damage(dmg)
 				if slow > 0.0:
 					e.apply_slow(slow, slow_time)
@@ -220,7 +239,8 @@ func _draw() -> void:
 				var lp := t.position - position
 				draw_line(Vector2.ZERO, lp, Color(bullet_color, 0.85), 3.0)
 				draw_circle(lp, 5.0, bullet_color)
-	if selected:
+	# Support towers (Gold/Amp) have no range/AOE, so don't draw a range circle.
+	if selected and mode != "support" and range_radius > 0.0:
 		draw_circle(Vector2.ZERO, range_radius, Color(1, 1, 1, 0.06))
 		draw_arc(Vector2.ZERO, range_radius, 0.0, TAU, 48, Color(1, 1, 1, 0.40), 1.5)
 	draw_circle(Vector2.ZERO, 18.0, Color(0.12, 0.12, 0.15))
