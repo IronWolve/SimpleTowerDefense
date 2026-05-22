@@ -12,9 +12,9 @@ func set_entries(e: Array) -> void:
 
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
-	var fs := 12
-	var lh := 16.0
-	var indent := _text(font, fs, 0.0, 9.0, "Enemies:", Color(0.74, 0.80, 0.76)) + 12.0
+	var fs := 10
+	var lh := 13.0
+	var indent := _text(font, fs, 0.0, 6.0, "Enemies:", Color(0.74, 0.80, 0.76)) + 12.0
 	# Column 1 holds the normal enemy types; bosses go in a second column so the
 	# list stays at 3 lines. Size column 2's x off the widest normal label.
 	var col2_x := indent + 18.0

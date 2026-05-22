@@ -5,7 +5,7 @@ extends CanvasLayer
 
 const BAR_Y := 600.0
 const APP_NAME := "Simple Tower Defense"
-const APP_VERSION := "v33"
+const APP_VERSION := "v34"
 const BUY_TYPES := ["tower", "ice", "laser", "cannon", "sniper", "missile",
 	"gold", "amplifier",
 	"wall", "tar_trap", "spike_trap", "poison_trap", "fire_trap", "volcano_trap"]
@@ -36,7 +36,7 @@ const HELP_TEXT := _H + "Controls" + _HE + \
 """Toggle in Options: Hard mode (no bonus lives, 40% less starting gold), Unlimited lives / money, No-cost walls, 30s round timer with early-send bonus, hold-drag wall building. Settings persist across sessions.
 
 """ + _H + "Maps & Editor" + _HE + \
-"""In Options pick a pre-built map (Open field, Maze, Fun Map, Spiral), choose Generated for one continuous single-path labyrinth - no branches or dead ends, with a few solid 3x3 blocks to build tower clusters on (great for the Amplifier), a fresh layout each New Game (spawn/base move to the path's ends), or build your own: enable No-cost walls, lay out your walls in-game, type a name and press Save. Saved maps appear in the dropdown as "Custom - name". Click Maps Folder to open the save directory in your file manager (desktop only).
+"""In Options pick a pre-built map (Open field or Spiral), choose Generated for one continuous single-path labyrinth - no branches or dead ends, with a few solid 3x3 blocks to build tower clusters on (great for the Amplifier), a fresh layout each New Game (spawn/base move to the path's ends), or build your own: enable No-cost walls, lay out your walls in-game, type a name and press Save. Saved maps appear in the dropdown as "Custom - name". Click Maps Folder to open the save directory in your file manager (desktop only).
 
 """ + _H + "Tower Stats   (Level 1 -> Level 10)" + _HE + \
 """[b]Bullet[/b]   15 dmg @ 1.0/s    ->   109 dmg @ 3.25/s   (rate caps at 4.0/s)
@@ -280,24 +280,26 @@ func _build_bar() -> void:
 		_buy_buttons[t] = b
 		bx += 58
 
-	_info_label = _make_label(Vector2(624, 8), 13)
+	_info_label = _make_label(Vector2(624, 3), 10)
+	# Tight line spacing so up to 3 lines fit above the divider.
+	_info_label.add_theme_constant_override("line_spacing", 0)
 	bar.add_child(_info_label)
 
-	# Divider between the selected-piece info (top) and the wave info (bottom).
+	# Divider between the selected-piece info (top, up to 3 lines) and wave info.
 	var divider := ColorRect.new()
 	divider.color = Color(0.45, 0.50, 0.62, 0.55)
-	divider.position = Vector2(620, 46)
+	divider.position = Vector2(620, 48)
 	divider.size = Vector2(388, 2)
 	divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.add_child(divider)
 
-	_wave_info_label = _make_label(Vector2(624, 52), 13)
+	_wave_info_label = _make_label(Vector2(624, 51), 10)
 	_wave_info_label.add_theme_color_override("font_color", Color(0.95, 0.82, 0.42))
 	bar.add_child(_wave_info_label)
 
 	_enemy_legend = EnemyLegend.new()
-	_enemy_legend.position = Vector2(624, 66)
-	_enemy_legend.size = Vector2(384, 52)
+	_enemy_legend.position = Vector2(624, 65)
+	_enemy_legend.size = Vector2(384, 53)
 	_enemy_legend.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.add_child(_enemy_legend)
 
@@ -305,16 +307,16 @@ func _build_bar() -> void:
 	_options_button.pressed.connect(_on_options_pressed)
 	bar.add_child(_options_button)
 
-	_start_button = _make_button("Start Wave", Vector2(1010, 6), Vector2(202, 42), 15)
+	_start_button = _make_button("Start Wave", Vector2(1070, 6), Vector2(202, 42), 15)
 	_start_button.pressed.connect(_on_start_pressed)
 	bar.add_child(_start_button)
 
 	# Auto / Pause stack vertically on the left; Speed sits beside them.
-	_auto_button = _make_button("Auto: On", Vector2(1010, 62), Vector2(98, 26), 11)
+	_auto_button = _make_button("Auto: On", Vector2(1070, 62), Vector2(98, 26), 11)
 	_auto_button.pressed.connect(_on_auto_pressed)
 	bar.add_child(_auto_button)
 
-	_pause_button = _make_button("Pause", Vector2(1010, 90), Vector2(98, 26), 11)
+	_pause_button = _make_button("Pause", Vector2(1070, 90), Vector2(98, 26), 11)
 	_pause_button.pressed.connect(_on_pause_pressed)
 	bar.add_child(_pause_button)
 
@@ -322,7 +324,7 @@ func _build_bar() -> void:
 	_undo_button.pressed.connect(_on_undo_pressed)
 	bar.add_child(_undo_button)
 
-	_speed_button = _make_button(_speed_label(), Vector2(1114, 62), Vector2(98, 26), 11)
+	_speed_button = _make_button(_speed_label(), Vector2(1174, 62), Vector2(98, 26), 11)
 	_speed_button.tooltip_text = "Left-click: faster   Right-click: slower"
 	_speed_button.gui_input.connect(_on_speed_input)
 	bar.add_child(_speed_button)
@@ -381,6 +383,13 @@ func _build_options() -> void:
 	app_name.add_theme_font_size_override("font_size", 11)
 	app_name.add_theme_color_override("font_color", Color(0.62, 0.66, 0.82))
 	panel.add_child(app_name)
+
+	var ver_label := Label.new()
+	ver_label.text = "Ver. %s" % APP_VERSION
+	ver_label.position = Vector2(8, 4)
+	ver_label.add_theme_font_size_override("font_size", 11)
+	ver_label.add_theme_color_override("font_color", Color(0.62, 0.66, 0.82))
+	panel.add_child(ver_label)
 
 	var title := Label.new()
 	title.text = "Options"
@@ -603,8 +612,6 @@ func _stats_rows_to_bbcode(rows: Array) -> String:
 func _map_display_name(key: String) -> String:
 	match key:
 		"none": return "Open field"
-		"maze": return "Maze"
-		"fun": return "Fun Map"
 		"spiral": return "Spiral"
 		"generate": return "Generated"
 		_:
@@ -735,10 +742,8 @@ func _refresh_map_select() -> void:
 		return
 	_map_select.clear()
 	_map_select.add_item("Map:  Open field")  # 0 -> "none"
-	_map_select.add_item("Map:  Maze")        # 1 -> "maze"
-	_map_select.add_item("Map:  Fun Map")     # 2 -> "fun"
-	_map_select.add_item("Map:  Spiral")      # 3 -> "spiral"
-	_map_select.add_item("Map:  Generated")  # 4 -> "generate"
+	_map_select.add_item("Map:  Spiral")      # 1 -> "spiral"
+	_map_select.add_item("Map:  Generated")   # 2 -> "generate"
 	_custom_map_names = GameState.list_custom_maps()
 	for name in _custom_map_names:
 		_map_select.add_item("Map:  Custom - " + name)
@@ -746,27 +751,23 @@ func _refresh_map_select() -> void:
 
 func _map_index_for(t: String) -> int:
 	match t:
-		"maze": return 1
-		"fun": return 2
-		"spiral": return 3
-		"generate": return 4
+		"spiral": return 1
+		"generate": return 2
 		_:
 			if t.begins_with("custom:"):
 				var name := t.substr(7)
 				var k := _custom_map_names.find(name)
 				if k >= 0:
-					return 5 + k
+					return 3 + k
 			return 0
 
 func _map_type_for(idx: int) -> String:
 	match idx:
-		1: return "maze"
-		2: return "fun"
-		3: return "spiral"
-		4: return "generate"
+		1: return "spiral"
+		2: return "generate"
 		_:
-			if idx >= 5 and idx - 5 < _custom_map_names.size():
-				return "custom:" + _custom_map_names[idx - 5]
+			if idx >= 3 and idx - 3 < _custom_map_names.size():
+				return "custom:" + _custom_map_names[idx - 3]
 			return "none"
 
 ## Clears every lifetime stat back to zero and refreshes both the dashboard
@@ -843,7 +844,7 @@ func _connect_events() -> void:
 	Events.lives_changed.connect(func(_v): _refresh_stats())
 	Events.wave_changed.connect(func(_v): _refresh_stats(); _update_start(); _update_wave_info())
 	Events.stock_changed.connect(_refresh_buy_buttons)
-	Events.path_changed.connect(func(_v): _update_start())
+	Events.path_changed.connect(func(_v): _update_start(); _update_wave_info())
 	Events.game_over.connect(func(): dismiss_popup(); _update_start())
 
 func _refresh_stats() -> void:
@@ -865,10 +866,19 @@ func _refresh_buy_buttons() -> void:
 		else:
 			_buy_buttons[t].text = "%s\n$%d" % [d["short"], d["cost"]]
 
+## Two-or-three line info for a placed piece: name, stats, and (if a damage
+## tower is being amplified) an enhancement line.
+func _structure_info_text(s: Structure) -> String:
+	var txt := "%s\n%s" % [s.display_name(), s.info_text()]
+	if s is Tower:
+		var enh: String = (s as Tower).enhancement_text()
+		if enh != "":
+			txt += "\n" + enh
+	return txt
+
 func _update_info() -> void:
 	if _hovered_structure != null and is_instance_valid(_hovered_structure):
-		_info_label.text = "%s\n%s" % [
-			_hovered_structure.display_name(), _hovered_structure.info_text()]
+		_info_label.text = _structure_info_text(_hovered_structure)
 	elif _hovered_buy_type != "":
 		_info_label.text = _type_info(_hovered_buy_type)
 	elif selected_type != "":
@@ -888,7 +898,7 @@ func _on_buy_unhovered(t: String) -> void:
 ## Force the info panel to a placed piece's current name and stats.
 func _show_structure_info(s: Structure) -> void:
 	if s != null and is_instance_valid(s):
-		_info_label.text = "%s\n%s" % [s.display_name(), s.info_text()]
+		_info_label.text = _structure_info_text(s)
 
 func _update_wave_info() -> void:
 	if wave_manager == null:
@@ -902,8 +912,14 @@ func _update_wave_info() -> void:
 	var tag := "Wave %d - %s" % [n, style]
 	if total_bosses > 0:
 		tag = "Wave %d - %s + %d BOSS" % [n, style, total_bosses]
-	_wave_info_label.text = "Next - %s:   %d HP   %d enemies   $%d total" % [
-		tag, int(d["hp"]), int(d["count"]), int(d.get("total_reward", 0))]
+	var total := int(d.get("total_reward", 0))
+	# With Gold Mines on the board, also show the gold-enhanced total.
+	var bonus := level.gold_bonus() if level != null else 0.0
+	var gold_str := "$%d total" % total
+	if bonus > 0.0:
+		gold_str = "Wave $%d / Enhanced $%d" % [total, int(round(total * (1.0 + bonus)))]
+	_wave_info_label.text = "Next - %s:   %d HP   %d enemies   %s" % [
+		tag, int(d["hp"]), int(d["count"]), gold_str]
 	var ents := []
 	for t in WaveManager.ENEMY_TYPES:
 		ents.append({"shape": t["shape"], "color": t["color"],
@@ -1091,10 +1107,10 @@ func _reposition_popup() -> void:
 ## Second line of the upgrade popup: DPS now -> DPS after upgrade.
 ## For beams and DoT traps damage is already a per-second value; for everything
 ## else we multiply by fire_rate (or eruption rate for volcano).
-## The arrow glyph for "before -> after" text. Web's fallback font lacks the
-## real arrow (renders tofu), so use ">" there and the real "→" on desktop.
+## The arrow glyph for "before -> after" text. Delegates to GameState.arrow()
+## so desktop gets the real "→" and web gets ASCII "->" (its font lacks the arrow).
 func _arrow() -> String:
-	return ">" if OS.has_feature("web") else "→"
+	return GameState.arrow()
 
 func _dps_delta_text(s: Structure) -> String:
 	var now := _dps_at(s, s.level)

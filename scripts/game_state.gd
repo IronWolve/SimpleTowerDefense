@@ -33,7 +33,7 @@ var round_timer_bonus := true
 ## Persistent option: board size for a new game (0 normal, 1 large, 2 huge).
 var board_size := 0
 ## Persistent option: which pre-built map to use for a new game.
-## One of: "none" (open field), "maze" (serpentine), "fun" (winding Fun Map).
+## One of: "none" (open field), "spiral", "generate", or "custom:<name>".
 var map_type := "none"
 
 ## Best-ever wave reached and best-ever score, persisted across sessions.
@@ -54,6 +54,11 @@ const FAST_GFX_SCALE := 4.0
 
 func reduced_gfx() -> bool:
 	return Engine.time_scale >= FAST_GFX_SCALE
+
+## Arrow glyph for info/help text: a real arrow on desktop, ASCII "->" on web
+## (the web build's fallback font can't render the Unicode arrow).
+func arrow() -> String:
+	return "->" if OS.has_feature("web") else "→"
 
 func _ready() -> void:
 	load_settings()
@@ -112,13 +117,10 @@ func load_settings() -> void:
 	free_walls = c.get_value("options", "free_walls", free_walls)
 	drag_draw_walls = c.get_value("options", "drag_draw_walls", drag_draw_walls)
 	round_timer_bonus = c.get_value("options", "round_timer_bonus", round_timer_bonus)
-	# Backward-compat: read the new key, else fall back to the old bool toggle.
-	var stored: String = c.get_value("options", "map_type", "")
-	if stored == "":
-		if c.get_value("options", "maze_map", false):
-			stored = "maze"
-		else:
-			stored = "none"
+	var stored: String = c.get_value("options", "map_type", "none")
+	# Maze and Fun Map were removed; treat any old saved value as Open field.
+	if stored in ["maze", "fun"]:
+		stored = "none"
 	map_type = stored
 	board_size = c.get_value("options", "board_size", board_size)
 	best_wave = c.get_value("stats", "best_wave", best_wave)

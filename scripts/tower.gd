@@ -50,9 +50,11 @@ func display_name() -> String:
 
 func info_text() -> String:
 	if type == "gold":
-		return "gold from kills +%.1f%% (all towers stack)" % (_support_pct() * 100.0)
+		var board_total := level_ref.gold_bonus() * 100.0 if level_ref != null else _support_pct() * 100.0
+		return "gold from kills +%.1f%%   (all Gold Mines total +%.1f%%)" % [
+			_support_pct() * 100.0, board_total]
 	if type == "amplifier":
-		return "+%.1f%% damage to the 8 towers touching it" % (_support_pct() * 100.0)
+		return "+%.1f%% damage to the 8 towers touching it (stacks with other amps)" % (_support_pct() * 100.0)
 	if mode == "beam":
 		return "beam   %d dmg/sec   range %d   single target" % [
 			int(damage), int(range_radius)]
@@ -98,6 +100,24 @@ func _process(delta: float) -> void:
 ## This support tower's per-level percentage (gold or amplifier), 0.5%/level.
 func _support_pct() -> float:
 	return PieceData.SUPPORT_PCT_PER_LEVEL * level
+
+## Info-box 3rd line for a tower being boosted by adjacent Amplifiers (damage
+## towers, or a Gold Mine's gold rate); "" when not amplified / not applicable.
+func enhancement_text() -> String:
+	if level_ref == null:
+		return ""
+	var b := level_ref.amplifier_bonus_at(cell)
+	if b <= 0.0:
+		return ""
+	if type == "gold":
+		var amp := minf(Level.GOLD_AMP_CAP, b)
+		return "Amplified  +%d%%   %s   gold +%.1f%%" % [
+			int(round(amp * 100.0)), GameState.arrow(), _support_pct() * (1.0 + amp) * 100.0]
+	if mode != "shot" and mode != "beam":
+		return ""
+	var unit := "dmg/s" if mode == "beam" else "dmg"
+	return "Amplified  +%d%%   %s   %d %s" % [
+		int(round(b * 100.0)), GameState.arrow(), int(round(damage * (1.0 + b))), unit]
 
 ## Damage after applying any adjacent Amplifier towers' boost.
 func _boosted_damage() -> float:

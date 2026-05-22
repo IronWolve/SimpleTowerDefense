@@ -81,10 +81,6 @@ func _ready() -> void:
 	add_child(_overlay)
 	Events.piece_selected.connect(_on_piece_selected)
 	match GameState.map_type:
-		"maze":
-			_build_maze()
-		"fun":
-			_build_fun()
 		"spiral":
 			_build_spiral()
 		"generate":
@@ -131,6 +127,8 @@ func _alt_upgrade_ten(s: Structure) -> void:
 	_end_group()
 	if done > 0 and hud != null:
 		hud._show_structure_info(s)
+		if s.type == "gold" or s.type == "amplifier":  # gold-enhanced total may change
+			hud._update_wave_info()
 
 ## Returns the current wall layout as 0/1 strings, one per row.
 ## Towers and traps are ignored - this captures the map structure only.
@@ -168,18 +166,6 @@ func _erase_map_wall(c: Vector2i) -> void:
 	w.queue_free()
 
 ## Pre-builds a serpentine wall maze so enemies wind across the board.
-func _build_maze() -> void:
-	var gap_top := true
-	var x := 3
-	while x <= COLS - 5:
-		for y in range(ROWS):
-			var in_gap := y <= 1 if gap_top else y >= ROWS - 2
-			if in_gap:
-				continue
-			_place_map_wall(Vector2i(x, y))
-		gap_top = not gap_top
-		x += 4
-
 ## Builds a full-coverage single-path labyrinth: a Hamiltonian path over the
 ## coarse lattice (every cell on ONE route - no dead ends, no branches, no
 ## self-crossing, fills the board) that turns in both directions. Spawn and base
@@ -616,21 +602,6 @@ func _build_spiral_procedural() -> void:
 				_place_map_wall(Vector2i(x, by))
 				bump_up = not bump_up
 
-## Pre-builds the "Fun Map": a much denser serpentine with vertical wall
-## columns every two cells, alternating top/bottom 2-cell gaps. The path
-## winds the full board height many times before reaching the base.
-func _build_fun() -> void:
-	var gap_top := true
-	var x := 2
-	while x <= COLS - 3:
-		for y in range(ROWS):
-			var in_gap := y <= 1 if gap_top else y >= ROWS - 2
-			if in_gap:
-				continue
-			_place_map_wall(Vector2i(x, y))
-		gap_top = not gap_top
-		x += 2
-
 # --- view zoom (mouse wheel) ---
 func _setup_zoom() -> void:
 	var fit := minf(PLAY_W / float(COLS * CELL), PLAY_H / float(ROWS * CELL))
@@ -810,13 +781,16 @@ func _rebuild_enemy_buckets() -> void:
 			_enemy_buckets[key] = []
 		_enemy_buckets[key].append(e)
 
-## Total kill-gold bonus from every Gold Mine on the board (0.5%/level each).
+## Total kill-gold bonus from every Gold Mine (0.5%/level each). An adjacent
+## Amplifier boosts a mine's contribution too, capped at +50% so it stays sane.
+const GOLD_AMP_CAP := 0.5
 func gold_bonus() -> float:
 	var b := 0.0
 	for node in towers.get_children():
 		var t := node as Tower
 		if t != null and t.type == "gold":
-			b += PieceData.SUPPORT_PCT_PER_LEVEL * t.level
+			var amp := minf(GOLD_AMP_CAP, amplifier_bonus_at(t.cell))
+			b += PieceData.SUPPORT_PCT_PER_LEVEL * t.level * (1.0 + amp)
 	return b
 
 ## Total Amplifier damage boost applied to a tower at `cell` (0.5%/level per
@@ -1146,6 +1120,8 @@ func upgrade_selected() -> void:
 	var refund := 0 if GameState.unlimited_money else cost
 	_record_action({"k": "upgrade", "cell": s.cell, "cost": refund})
 	s.do_upgrade()
+	if (s.type == "gold" or s.type == "amplifier") and hud != null:  # gold total may change
+		hud._update_wave_info()
 
 # --- undo plumbing ---
 func _record_action(entry: Dictionary) -> void:
