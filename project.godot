@@ -1,0 +1,29 @@
+; Engine configuration file.
+; Tower Defense — Godot 4.6 prototype.
+
+config_version=5
+
+[application]
+
+config/name="Tower Defense"
+config/features=PackedStringArray("4.6", "GL Compatibility")
+run/main_scene="res://scenes/main.tscn"
+
+[autoload]
+
+Events="*res://scripts/events.gd"
+GameState="*res://scripts/game_state.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/size/resizable=true
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true

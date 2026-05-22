@@ -1,0 +1,8 @@
+# Godot 4 editor cache / generated data
+.godot/
+
+# Exported builds
+/build/
+/export/
+*.exe
+*.pck
