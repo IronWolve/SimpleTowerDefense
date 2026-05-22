@@ -26,10 +26,7 @@ func _ready() -> void:
 	wave_manager.level = level
 	add_child(wave_manager)
 	if loading:
-		wave_manager.restore_state(
-			int(save_data.get("started", 0)),
-			bool(save_data.get("auto", true)),
-			int(save_data.get("bonus_through", 0)))
+		wave_manager.restore(save_data.get("wave_state", {}))
 
 	hud = HUD.new()
 	hud.name = "HUD"

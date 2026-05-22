@@ -157,6 +157,58 @@ func apply_dot(dps: float, duration: float, dtype: String) -> void:
 		d["dps"] = maxf(d["dps"], dps)
 		d["timer"] = maxf(d["timer"], duration)
 
+## --- Save / load: capture and restore an in-flight enemy's full state. ---
+func serialize() -> Dictionary:
+	var path: Array = []
+	for c in _path:
+		path.append([c.x, c.y])
+	var dots: Dictionary = {}
+	for k in _dots:
+		dots[k] = {"dps": _dots[k]["dps"], "timer": _dots[k]["timer"]}
+	return {
+		"cell": [cell.x, cell.y], "pos": [position.x, position.y],
+		"base_speed": base_speed, "speed": speed,
+		"max_health": max_health, "health": health,
+		"reward": reward, "leak": leak_damage, "radius": radius,
+		"color": [color.r, color.g, color.b, color.a], "resist": resist,
+		"is_boss": is_boss, "shape": shape, "boss_kind": boss_kind, "face": _face,
+		"path": path, "slow_t": _slow_timer, "slow_f": _slow_factor,
+		"dots": dots, "vuln_p": _vuln_pct, "vuln_t": _vuln_timer,
+	}
+
+func restore(lvl: Level, d: Dictionary) -> void:
+	_level = lvl
+	var cc: Array = d.get("cell", [0, 0])
+	cell = Vector2i(int(cc[0]), int(cc[1]))
+	var pp: Array = d.get("pos", [0, 0])
+	position = Vector2(pp[0], pp[1])
+	base_speed = d.get("base_speed", 60.0)
+	speed = d.get("speed", base_speed)
+	max_health = d.get("max_health", 30.0)
+	health = d.get("health", max_health)
+	reward = int(d.get("reward", 1))
+	leak_damage = int(d.get("leak", 1))
+	radius = d.get("radius", 11.0)
+	var col: Array = d.get("color", [0.9, 0.35, 0.35, 1.0])
+	color = Color(col[0], col[1], col[2], col[3])
+	resist = d.get("resist", {})
+	is_boss = d.get("is_boss", false)
+	shape = d.get("shape", "circle")
+	boss_kind = d.get("boss_kind", "beetle")
+	_face = d.get("face", 0.0)
+	_path = []
+	for pc in d.get("path", []):
+		_path.append(Vector2i(int(pc[0]), int(pc[1])))
+	_slow_timer = d.get("slow_t", 0.0)
+	_slow_factor = d.get("slow_f", 0.0)
+	_dots = {}
+	var dts: Dictionary = d.get("dots", {})
+	for k in dts:
+		_dots[k] = {"dps": dts[k]["dps"], "timer": dts[k]["timer"]}
+	_vuln_pct = d.get("vuln_p", 0.0)
+	_vuln_timer = d.get("vuln_t", 0.0)
+	queue_redraw()
+
 func _die() -> void:
 	if _dead:
 		return

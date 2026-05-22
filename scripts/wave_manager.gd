@@ -67,16 +67,50 @@ func bonus_lives_through() -> int:
 func is_field_clear() -> bool:
 	return _jobs.is_empty() and get_tree().get_nodes_in_group("enemies").is_empty()
 
-## Restore wave progress from a save. The field loads empty, so there's no
-## active countdown or spawn jobs.
-func restore_state(started: int, auto: bool, bonus_through: int) -> void:
-	_started = started
-	GameState.wave = started
-	auto_advance = auto
-	_bonus_lives_through = bonus_through
-	_countdown = -1.0
-	_queued_sends = 0
-	_jobs.clear()
+## Snapshot wave progress, including in-flight spawn jobs (stored as kind +
+## remaining + timer + wave; the per-wave stats are rebuilt from the wave # on
+## load, so no stat tables / Colors need serializing).
+func serialize() -> Dictionary:
+	var jobs: Array = []
+	for j in _jobs:
+		jobs.append({
+			"kind": j["kind"], "remaining": j["remaining"],
+			"timer": j["timer"], "wave": j.get("wave", _started),
+		})
+	return {
+		"started": _started, "countdown": _countdown, "auto": auto_advance,
+		"bonus_through": _bonus_lives_through,
+		"queued": _queued_sends, "queue_timer": _queue_timer, "jobs": jobs,
+	}
+
+## Restore wave progress (counters + in-flight spawn jobs) from a snapshot.
+func restore(d: Dictionary) -> void:
+	_started = int(d.get("started", 0))
+	GameState.wave = _started
+	_countdown = d.get("countdown", -1.0)
+	auto_advance = d.get("auto", true)
+	_bonus_lives_through = int(d.get("bonus_through", _started))
+	_queued_sends = int(d.get("queued", 0))
+	_queue_timer = d.get("queue_timer", 0.0)
+	_jobs = []
+	for jd in d.get("jobs", []):
+		var w := int(jd.get("wave", _started))
+		var kind: String = jd.get("kind", "normal")
+		var def: Dictionary
+		match kind:
+			"boss":
+				def = _boss_def(w)
+			"turtle":
+				def = _turtle_def(w)
+			_:
+				def = _build_def(w)
+		var job: Dictionary = {
+			"kind": kind, "remaining": int(jd.get("remaining", 0)),
+			"timer": jd.get("timer", 0.0), "def": def, "wave": w,
+		}
+		if kind == "normal":
+			job["interval"] = def["interval"]
+		_jobs.append(job)
 	Events.wave_changed.emit(_started)
 
 func next_is_boss() -> bool:
@@ -152,19 +186,19 @@ func start_next_wave(max_bonus := false) -> void:
 	# The normal styled wave always spawns (even on boss waves).
 	_jobs.append({
 		"kind": "normal", "remaining": def["count"],
-		"interval": def["interval"], "timer": 0.0, "def": def,
+		"interval": def["interval"], "timer": 0.0, "def": def, "wave": _started,
 	})
 	# Boss waves layer their bosses on concurrent, randomly-paced timelines:
 	# a beetle/spider group plus a slower, tankier turtle group.
 	if def["boss_count"] > 0:
 		_jobs.append({
 			"kind": "boss", "remaining": def["boss_count"],
-			"timer": randf_range(1.0, 5.0), "def": _boss_def(_started),
+			"timer": randf_range(1.0, 5.0), "def": _boss_def(_started), "wave": _started,
 		})
 	if def["turtle_count"] > 0:
 		_jobs.append({
 			"kind": "turtle", "remaining": def["turtle_count"],
-			"timer": randf_range(1.0, 5.0), "def": _turtle_def(_started),
+			"timer": randf_range(1.0, 5.0), "def": _turtle_def(_started), "wave": _started,
 		})
 	# The countdown to the NEXT wave begins as soon as this wave starts.
 	_countdown = _initial_countdown()

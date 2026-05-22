@@ -82,8 +82,10 @@ func _ready() -> void:
 	Events.piece_selected.connect(_on_piece_selected)
 	if not GameState.pending_load.is_empty():
 		# Resuming a saved run: rebuild the exact board from the snapshot's pieces
-		# (which include map walls) instead of generating a fresh map.
+		# (which include map walls) instead of generating a fresh map, then put
+		# every saved enemy back exactly where it was.
 		_load_pieces(GameState.pending_load)
+		_load_enemies(GameState.pending_load)
 	else:
 		match GameState.map_type:
 			"spiral":
@@ -152,8 +154,9 @@ func dump_walls_grid() -> Array[String]:
 		grid.append(line)
 	return grid
 
-## Snapshot the whole run for save/load: board + every placed piece + economy +
-## wave state. Live enemies/bullets are NOT saved (snapshots are between waves).
+## Snapshot the whole run for save/load: board, every placed piece, economy,
+## wave state (incl. in-flight spawn jobs) and every live enemy. In-flight
+## bullets are intentionally skipped (they re-fire instantly).
 func serialize_run() -> Dictionary:
 	var wm: WaveManager = hud.wave_manager if hud != null else null
 	var pieces: Array = []
@@ -166,19 +169,31 @@ func serialize_run() -> Dictionary:
 			"lvl": s.level, "inv": s.gold_invested, "stock": s.from_stock,
 			"under": _under_walls.has(cell),
 		})
+	var ens: Array = []
+	for node in enemies.get_children():
+		var e := node as Enemy
+		if e != null and e.is_alive():
+			ens.append(e.serialize())
 	return {
-		"v": 1,
+		"v": 2,
 		"board_size": GameState.board_size,
 		"spawn": [spawn_cell.x, spawn_cell.y],
 		"base": [base_cell.x, base_cell.y],
 		"gold": GameState.gold, "lives": GameState.lives,
 		"wave": GameState.wave, "score": GameState.score,
 		"stock": {"wall": GameState.stock_of("wall"), "tower": GameState.stock_of("tower")},
-		"auto": wm.auto_advance if wm != null else true,
-		"started": wm.waves_started() if wm != null else GameState.wave,
-		"bonus_through": wm.bonus_lives_through() if wm != null else 0,
+		"wave_state": wm.serialize() if wm != null else {},
+		"enemies": ens,
 		"pieces": pieces,
 	}
+
+## Recreate every saved enemy at its exact state. Called on load after the board
+## is rebuilt (so their stored paths are valid against the same layout).
+func _load_enemies(data: Dictionary) -> void:
+	for ed in data.get("enemies", []):
+		var e := Enemy.new()
+		enemies.add_child(e)
+		e.restore(self, ed)
 
 ## Write the auto-save slot (called by WaveManager on each wave clear).
 func autosave() -> void:

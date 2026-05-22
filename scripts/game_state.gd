@@ -237,6 +237,65 @@ func read_save(slot: String) -> Dictionary:
 	var parsed: Variant = JSON.parse_string(txt)
 	return parsed if parsed is Dictionary else {}
 
+## --- Named saves on disk (the Save/Load popup). One JSON per name under
+## user://saves/, separate from the "auto" slot at the user:// root. ---
+const SAVES_DIR := "user://saves"
+
+func _ensure_saves_dir() -> void:
+	if not DirAccess.dir_exists_absolute(SAVES_DIR):
+		DirAccess.make_dir_recursive_absolute(SAVES_DIR)
+
+func _named_save_path(save_name: String) -> String:
+	return "%s/%s.json" % [SAVES_DIR, save_name]
+
+## Names (without .json) of saved games, newest first.
+func list_saves() -> PackedStringArray:
+	var out: PackedStringArray = PackedStringArray()
+	if not DirAccess.dir_exists_absolute(SAVES_DIR):
+		return out
+	var d := DirAccess.open(SAVES_DIR)
+	if d == null:
+		return out
+	var named: Array = []
+	d.list_dir_begin()
+	var n := d.get_next()
+	while n != "":
+		if not d.current_is_dir() and n.ends_with(".json"):
+			var base := n.substr(0, n.length() - 5)
+			named.append([base, FileAccess.get_modified_time(_named_save_path(base))])
+		n = d.get_next()
+	d.list_dir_end()
+	named.sort_custom(func(a, b): return a[1] > b[1])
+	for entry in named:
+		out.append(entry[0])
+	return out
+
+func write_named_save(save_name: String, data: Dictionary) -> bool:
+	_ensure_saves_dir()
+	var f := FileAccess.open(_named_save_path(save_name), FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_string(JSON.stringify(data))
+	f.close()
+	return true
+
+func read_named_save(save_name: String) -> Dictionary:
+	var path := _named_save_path(save_name)
+	if not FileAccess.file_exists(path):
+		return {}
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return {}
+	var txt := f.get_as_text()
+	f.close()
+	var parsed: Variant = JSON.parse_string(txt)
+	return parsed if parsed is Dictionary else {}
+
+func delete_named_save(save_name: String) -> void:
+	var path := _named_save_path(save_name)
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
+
 ## Restore the run-level economy from a save snapshot (board/pieces are rebuilt
 ## by Level; wave counters by WaveManager). Called by main.gd on a load.
 func apply_run_state(data: Dictionary) -> void:

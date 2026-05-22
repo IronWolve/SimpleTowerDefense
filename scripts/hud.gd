@@ -5,7 +5,7 @@ extends CanvasLayer
 
 const BAR_Y := 600.0
 const APP_NAME := "Simple Tower Defense"
-const APP_VERSION := "v39"
+const APP_VERSION := "v40"
 const BUY_TYPES := ["tower", "ice", "laser", "cannon", "sniper", "missile",
 	"gold", "amplifier",
 	"wall", "tar_trap", "poison_trap", "fire_trap", "spike_trap", "volcano_trap"]
@@ -687,61 +687,114 @@ func _on_options_pressed() -> void:
 ## Manual save (Options). Only allowed between waves - we don't serialize live
 ## enemies, so loading always resumes at the start of a wave with the field clear.
 func _on_save_game_pressed() -> void:
-	if GameState.game_over:
-		show_toast("Can't save after game over", 3.0)
-		return
-	if wave_manager != null and not wave_manager.is_field_clear():
-		show_toast("Finish the current wave before saving", 3.0)
-		return
-	var head := "Overwrite your saved game?" if GameState.has_save("manual") else "Save your game?"
-	var msg := "%s\nWave %d    $%s" % [head, GameState.wave, GameState.abbrev(GameState.gold)]
-	_show_confirm(msg, "Save", func() -> void:
-		if level != null and GameState.write_save("manual", level.serialize_run()):
-			show_toast("Game saved", 2.0)
-		else:
-			show_toast("Save failed", 3.0))
+	_show_save_popup()
 
 func _on_load_game_pressed() -> void:
-	var data := GameState.read_save("manual")
-	if data.is_empty():
-		show_toast("No saved game found", 3.0)
-		return
-	var msg := "Load saved game?\nWave %d    $%s\nThis ends your current run." % [
-		int(data.get("wave", 0)), GameState.abbrev(int(data.get("gold", 0)))]
-	_show_confirm(msg, "Load", func() -> void: _load_slot("manual"))
+	_show_save_popup()
 
-## A small modal confirm dialog matching the game's flat panels. Works while the
-## game is paused (HUD is PROCESS_MODE_ALWAYS). Calls on_yes only if confirmed.
-func _show_confirm(body: String, yes_label: String, on_yes: Callable) -> void:
+## The Save / Load popup: name a save and write it to disk, or pick an existing
+## save to Load / Delete. Named saves live under user://saves/. Runs while the
+## game is paused (HUD is PROCESS_MODE_ALWAYS).
+func _show_save_popup() -> void:
 	var root := ColorRect.new()
 	root.color = Color(0, 0, 0, 0.7)
 	root.size = Vector2(1280, 720)
 	add_child(root)
-	var panel := _make_panel(Vector2(440, 268), Vector2(400, 192))
+	var panel := _make_panel(Vector2(390, 96), Vector2(500, 520))
 	root.add_child(panel)
-	var label := Label.new()
-	label.text = body
-	label.position = Vector2(20, 22)
-	label.size = Vector2(360, 96)
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 16)
-	panel.add_child(label)
-	var yes := _make_button(yes_label, Vector2(30, 132), Vector2(160, 46), 18)
-	yes.pressed.connect(func() -> void:
-		root.queue_free()
-		on_yes.call())
-	panel.add_child(yes)
-	var no := _make_button("Cancel", Vector2(210, 132), Vector2(160, 46), 18)
-	no.pressed.connect(func() -> void: root.queue_free())
-	panel.add_child(no)
+
+	var title := Label.new()
+	title.text = "Save / Load Game"
+	title.position = Vector2(0, 14)
+	title.size = Vector2(500, 30)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 22)
+	panel.add_child(title)
+
+	var name_input := LineEdit.new()
+	name_input.position = Vector2(24, 56)
+	name_input.size = Vector2(330, 38)
+	name_input.placeholder_text = "save name..."
+	name_input.add_theme_font_size_override("font_size", 16)
+	panel.add_child(name_input)
+
+	var list := ItemList.new()
+	list.position = Vector2(24, 110)
+	list.size = Vector2(452, 322)
+	list.add_theme_font_size_override("font_size", 15)
+	panel.add_child(list)
+
+	var populate := func() -> void:
+		list.clear()
+		for nm in GameState.list_saves():
+			list.add_item(nm)
+	populate.call()
+
+	var save_btn := _make_button("Save", Vector2(364, 55), Vector2(112, 40), 16)
+	save_btn.pressed.connect(func() -> void:
+		if GameState.game_over:
+			show_toast("Can't save after game over", 3.0)
+			return
+		var nm := name_input.text.strip_edges()
+		if nm == "":
+			nm = _default_save_name()  # blank -> auto-name, so saving is one click
+		if level != null and GameState.write_named_save(nm, level.serialize_run()):
+			show_toast("Saved: %s" % nm, 2.0)
+			name_input.clear()
+			populate.call()
+		else:
+			show_toast("Save failed", 3.0))
+	panel.add_child(save_btn)
+
+	var load_btn := _make_button("Load", Vector2(24, 444), Vector2(106, 46), 16)
+	load_btn.pressed.connect(func() -> void:
+		var sel := list.get_selected_items()
+		if sel.is_empty():
+			show_toast("Select a save to load", 2.5)
+			return
+		_load_data(GameState.read_named_save(list.get_item_text(sel[0]))))
+	panel.add_child(load_btn)
+
+	var del_btn := _make_button("Delete", Vector2(140, 444), Vector2(106, 46), 16)
+	del_btn.pressed.connect(func() -> void:
+		var sel := list.get_selected_items()
+		if sel.is_empty():
+			show_toast("Select a save to delete", 2.5)
+			return
+		var nm := list.get_item_text(sel[0])
+		GameState.delete_named_save(nm)
+		show_toast("Deleted: %s" % nm, 2.0)
+		populate.call())
+	panel.add_child(del_btn)
+
+	if not OS.has_feature("web"):
+		var folder_btn := _make_button("Folder", Vector2(256, 444), Vector2(106, 46), 16)
+		folder_btn.pressed.connect(func() -> void:
+			GameState._ensure_saves_dir()
+			OS.shell_open(ProjectSettings.globalize_path(GameState.SAVES_DIR)))
+		panel.add_child(folder_btn)
+
+	var close_btn := _make_button("Close", Vector2(372, 444), Vector2(104, 46), 16)
+	close_btn.pressed.connect(func() -> void: root.queue_free())
+	panel.add_child(close_btn)
 
 func _on_continue_pressed() -> void:
 	_load_slot("auto")
 
-## Reload the scene resuming a save slot; main.gd applies GameState.pending_load.
-func _load_slot(slot: String) -> void:
-	var data := GameState.read_save(slot)
+## A unique default save name (used when the name field is left blank), so the
+## player can create any number of saves with a single click each.
+func _default_save_name() -> String:
+	var existing := GameState.list_saves()
+	var base := "Wave %d" % GameState.wave
+	if base not in existing:
+		return base
+	var i := 2
+	while ("%s (%d)" % [base, i]) in existing:
+		i += 1
+	return "%s (%d)" % [base, i]
+
+## Reload the scene resuming the given snapshot; main.gd applies pending_load.
+func _load_data(data: Dictionary) -> void:
 	if data.is_empty():
 		show_toast("No saved game found", 3.0)
 		return
@@ -749,6 +802,10 @@ func _load_slot(slot: String) -> void:
 	Engine.time_scale = 1.0
 	get_tree().paused = false
 	get_tree().reload_current_scene()
+
+## Resume a reserved slot file (user://save_<slot>.json), e.g. the auto-save.
+func _load_slot(slot: String) -> void:
+	_load_data(GameState.read_save(slot))
 
 ## Show/hide the options menu; the game pauses while it is open.
 func _set_options_visible(v: bool) -> void:
