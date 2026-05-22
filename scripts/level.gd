@@ -10,6 +10,10 @@ const PLAY_W := 1280.0
 const PLAY_H := 600.0
 const MIN_ZOOM := 0.5
 const MAX_ZOOM := 2.5
+## Board dimensions in cells (COLS x ROWS) for board_size 0/1/2.
+const BOARD_SIZES: Array[Vector2i] = [
+	Vector2i(32, 15), Vector2i(46, 22), Vector2i(64, 30),
+]
 
 var COLS := 32
 var ROWS := 15
@@ -61,12 +65,9 @@ const BUCKET_SIZE := 160  # 4 cells per bucket
 var _enemy_buckets: Dictionary = {}
 
 func _ready() -> void:
-	if GameState.board_size == 1:
-		COLS = 46
-		ROWS = 22
-	elif GameState.board_size == 2:
-		COLS = 64
-		ROWS = 30
+	var dim: Vector2i = BOARD_SIZES[clampi(GameState.board_size, 0, BOARD_SIZES.size() - 1)]
+	COLS = dim.x
+	ROWS = dim.y
 	spawn_cell = Vector2i(0, ROWS / 2)
 	base_cell = Vector2i(COLS - 1, ROWS / 2)
 	traps = _make_container("Traps")
@@ -86,6 +87,8 @@ func _ready() -> void:
 			_build_fun()
 		"spiral":
 			_build_spiral()
+		"generate":
+			_build_generated_map()
 		_:
 			if GameState.map_type.begins_with("custom:"):
 				_build_custom_map(GameState.map_type.substr(7))
@@ -176,6 +179,97 @@ func _build_maze() -> void:
 			_place_map_wall(Vector2i(x, y))
 		gap_top = not gap_top
 		x += 4
+
+## Procedurally builds a winding maze sized to the current board, then verifies
+## a spawn->base route exists and is long enough (not a straight shot). Walls
+## are 1-wide corridors so there are no big open rooms. Retries until the BFS
+## test passes; the last grid is used regardless so a map always appears.
+func _build_generated_map() -> void:
+	var grid: Array = []
+	var min_len := COLS + ROWS  # demand some winding, not a beeline
+	for _attempt in range(24):
+		grid = _generate_maze()
+		if _grid_path_len(grid, spawn_cell, base_cell) >= min_len:
+			break
+	for r in range(ROWS):
+		for c in range(COLS):
+			if grid[r][c] == 1:
+				_place_map_wall(Vector2i(c, r))
+
+## Returns a fresh 0/1 grid (1=wall) carved by an iterative recursive
+## backtracker on the even-cell lattice, with spawn and base connected in.
+func _generate_maze() -> Array:
+	var g: Array = []
+	for r in range(ROWS):
+		var row: Array = []
+		for c in range(COLS):
+			row.append(1)
+		g.append(row)
+	# Start on the nearest even cell to the spawn so the spawn connects cleanly.
+	var sy := spawn_cell.y - (spawn_cell.y % 2)
+	g[sy][0] = 0
+	var stack: Array = [Vector2i(0, sy)]
+	var dirs := [Vector2i(2, 0), Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2)]
+	while not stack.is_empty():
+		var cur: Vector2i = stack[stack.size() - 1]
+		var opts: Array = []
+		for d in dirs:
+			var nb: Vector2i = cur + d
+			if nb.x >= 0 and nb.x < COLS and nb.y >= 0 and nb.y < ROWS \
+					and g[nb.y][nb.x] == 1:
+				opts.append(d)
+		if opts.is_empty():
+			stack.pop_back()
+			continue
+		var step: Vector2i = opts[randi() % opts.size()]
+		var nxt: Vector2i = cur + step
+		var mid: Vector2i = cur + step / 2  # wall between -> open
+		g[mid.y][mid.x] = 0
+		g[nxt.y][nxt.x] = 0
+		stack.append(nxt)
+	_carve_connect(g, spawn_cell)
+	_carve_connect(g, base_cell)
+	return g
+
+## Opens `cell` and, if it has no open orthogonal neighbour, walks toward the
+## board's vertical centre opening cells until it touches the carved maze.
+func _carve_connect(g: Array, cell: Vector2i) -> void:
+	g[cell.y][cell.x] = 0
+	if _has_open_neighbor(g, cell):
+		return
+	var p := cell
+	var stepdir := 1 if p.y < ROWS / 2 else -1
+	while p.y >= 0 and p.y < ROWS:
+		g[p.y][p.x] = 0
+		if _has_open_neighbor(g, p):
+			return
+		p.y += stepdir
+
+func _has_open_neighbor(g: Array, cell: Vector2i) -> bool:
+	for d in DIRS:
+		var nb := cell + d
+		if in_bounds(nb) and g[nb.y][nb.x] == 0 and nb != cell:
+			return true
+	return false
+
+## BFS shortest-path length over open (0) cells, or -1 if unreachable.
+func _grid_path_len(g: Array, start: Vector2i, goal: Vector2i) -> int:
+	if g[start.y][start.x] != 0 or g[goal.y][goal.x] != 0:
+		return -1
+	var dist := {start: 0}
+	var q: Array[Vector2i] = [start]
+	var qi := 0
+	while qi < q.size():
+		var cur: Vector2i = q[qi]
+		qi += 1
+		if cur == goal:
+			return dist[cur]
+		for d in DIRS:
+			var nb: Vector2i = cur + d
+			if in_bounds(nb) and g[nb.y][nb.x] == 0 and not dist.has(nb):
+				dist[nb] = int(dist[cur]) + 1
+				q.append(nb)
+	return -1
 
 ## The Huge-board Spiral verbatim. Each row is 64 chars; "1" is a wall and
 ## "0" is an open / corridor / spawn / base cell. Spawn lives at (0, 15) and
@@ -481,6 +575,28 @@ func _rebuild_enemy_buckets() -> void:
 		if not _enemy_buckets.has(key):
 			_enemy_buckets[key] = []
 		_enemy_buckets[key].append(e)
+
+## Total kill-gold bonus from every Gold Mine on the board (0.5%/level each).
+func gold_bonus() -> float:
+	var b := 0.0
+	for node in towers.get_children():
+		var t := node as Tower
+		if t != null and t.type == "gold":
+			b += PieceData.SUPPORT_PCT_PER_LEVEL * t.level
+	return b
+
+## Total Amplifier damage boost applied to a tower at `cell` (0.5%/level per
+## adjacent Amplifier, counting all 8 touching cells).
+func amplifier_bonus_at(cell: Vector2i) -> float:
+	var b := 0.0
+	for dx in [-1, 0, 1]:
+		for dy in [-1, 0, 1]:
+			if dx == 0 and dy == 0:
+				continue
+			var p: Structure = _pieces.get(cell + Vector2i(dx, dy))
+			if p is Tower and (p as Tower).type == "amplifier":
+				b += PieceData.SUPPORT_PCT_PER_LEVEL * (p as Tower).level
+	return b
 
 ## Returns every live enemy within `radius` of `pos`. O(buckets-in-range).
 func enemies_near(pos: Vector2, radius: float) -> Array:

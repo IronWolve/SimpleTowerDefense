@@ -65,6 +65,9 @@ func info_text() -> String:
 		# and the effective dps for clarity.
 		return "%d/pulse (~%.0f dps)   area %d   every %.1fs" % [
 			int(dmg), dmg / ERUPT_PERIOD, int(reach), ERUPT_PERIOD]
+	if type == "spike_trap":
+		return "%d dmg/s or %d%% max HP/s on contact" % [
+			int(dmg), int(_spike_pct() * 100.0)]
 	return "%d damage / sec" % int(dmg)
 
 func _process(delta: float) -> void:
@@ -94,6 +97,14 @@ func _process_contact(delta: float) -> void:
 				# cap 50%; max-wins, no stacking).
 				if type == "poison_trap":
 					e.apply_vuln(_poison_vuln(), dur)
+			elif type == "spike_trap":
+				# Spike: the larger of a small flat DPS (kills early trash) or a
+				# percent of the enemy's max HP per second (tracks any wave and
+				# punishes tanks). Halved vs bosses so a lane can't trivialize them.
+				var pct := _spike_pct()
+				if e.is_boss:
+					pct *= 0.5
+				e.take_damage(maxf(dmg, pct * e.max_health) * delta)
 			else:
 				e.take_damage(dmg * delta)
 
@@ -101,6 +112,10 @@ func _process_contact(delta: float) -> void:
 ## capped at 50% extra.
 func _poison_vuln() -> float:
 	return minf(0.50, 0.05 + 0.01 * (level - 1))
+
+## Spike's bleed: 0.8% of max HP per second per level, capped at 12%/sec.
+func _spike_pct() -> float:
+	return minf(0.12, 0.008 * level)
 
 ## Periodic eruption: damage every enemy in reach in one visible pulse.
 func _process_aoe(delta: float) -> void:

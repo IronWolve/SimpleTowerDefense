@@ -49,6 +49,10 @@ func display_name() -> String:
 	return "%s  Lv.%d" % [PieceData.TYPES[type]["name"], level]
 
 func info_text() -> String:
+	if type == "gold":
+		return "gold from kills +%.1f%% (all towers stack)" % (_support_pct() * 100.0)
+	if type == "amplifier":
+		return "+%.1f%% damage to the 8 towers touching it" % (_support_pct() * 100.0)
 	if mode == "beam":
 		return "beam   %d dmg/sec   range %d   single target" % [
 			int(damage), int(range_radius)]
@@ -65,10 +69,15 @@ func info_text() -> String:
 func _process(delta: float) -> void:
 	if GameState.game_over:
 		return
+	if mode == "support":
+		# Gold Mine / Amplifier are passive - their effects are read elsewhere
+		# (Level.gold_bonus / Level.amplifier_bonus_at). Nothing to do per frame.
+		return
 	if mode == "beam":
 		_beam_targets = _acquire_beam_targets()
+		var bdmg := _boosted_damage()
 		for node in _beam_targets:
-			(node as Enemy).take_damage(damage * delta)
+			(node as Enemy).take_damage(bdmg * delta)
 		queue_redraw()
 		return
 	if mode == "slow":
@@ -85,6 +94,16 @@ func _process(delta: float) -> void:
 		_fire(target)
 		_cooldown += 1.0 / fire_rate
 		shots += 1
+
+## This support tower's per-level percentage (gold or amplifier), 0.5%/level.
+func _support_pct() -> float:
+	return PieceData.SUPPORT_PCT_PER_LEVEL * level
+
+## Damage after applying any adjacent Amplifier towers' boost.
+func _boosted_damage() -> float:
+	if level_ref == null:
+		return damage
+	return damage * (1.0 + level_ref.amplifier_bonus_at(cell))
 
 ## Ice tower: every interval, chill every enemy in range at once. No firing
 ## visual - the slow status icon on enemies is the only feedback (no flicker).
@@ -142,7 +161,7 @@ func _fire(target: Enemy) -> void:
 		return
 	var b := Bullet.new()
 	b.position = position
-	b.setup(target, damage, bullet_color, slow, slow_time, aoe_radius)
+	b.setup(target, _boosted_damage(), bullet_color, slow, slow_time, aoe_radius)
 	b.retarget = type == "missile"
 	b.style = BULLET_STYLE.get(type, "bullet")
 	b.level_ref = level_ref
@@ -153,17 +172,18 @@ func _fire(target: Enemy) -> void:
 func _direct_hit(target: Enemy) -> void:
 	if target == null or not is_instance_valid(target) or not target.is_alive():
 		return
+	var dmg := _boosted_damage()
 	if aoe_radius > 0.0:
 		for node in level_ref.enemies_near(target.position, aoe_radius):
 			var e := node as Enemy
 			if e == null or not e.is_alive():
 				continue
 			if target.position.distance_to(e.position) <= aoe_radius:
-				e.take_damage(damage)
+				e.take_damage(dmg)
 				if slow > 0.0:
 					e.apply_slow(slow, slow_time)
 	else:
-		target.take_damage(damage)
+		target.take_damage(dmg)
 		if slow > 0.0:
 			target.apply_slow(slow, slow_time)
 
@@ -230,3 +250,12 @@ func _draw_type_glyph() -> void:
 			draw_colored_polygon(PackedVector2Array([
 				Vector2(-2, 5), Vector2(0, 9.5), Vector2(2, 5)]),
 				Color(1.0, 0.78, 0.30))
+		"gold":  # a dollar sign
+			var gf := ThemeDB.fallback_font
+			var gw := gf.get_string_size("$", HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
+			draw_string(gf, Vector2(-gw / 2.0, 6.0), "$",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 18, ink)
+		"amplifier":  # an upward boost arrow
+			draw_line(Vector2(0, 7.5), Vector2(0, -7.5), ink, 2.6)
+			draw_line(Vector2(0, -7.5), Vector2(-5.5, -1.0), ink, 2.6)
+			draw_line(Vector2(0, -7.5), Vector2(5.5, -1.0), ink, 2.6)

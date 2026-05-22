@@ -14,8 +14,11 @@ var color := Color(0.90, 0.35, 0.35)
 var resist := {}
 var is_boss := false
 var shape := "circle"
-## Which boss silhouette to draw when is_boss is true: "beetle", "spider" or "scorpion".
+## Which boss silhouette to draw when is_boss is true: "beetle", "spider" or "turtle".
 var boss_kind := "beetle"
+## Rotation applied to the boss silhouette so its head points the way it moves
+## (silhouettes are drawn head-up, so this is movement-angle + PI/2). 0 = up.
+var _face := 0.0
 
 var _path: Array[Vector2i] = []
 var _slow_timer := 0.0
@@ -88,6 +91,11 @@ func _process(delta: float) -> void:
 	if _path.is_empty():
 		_reach_base()
 		return
+	# Face the current heading (used to rotate boss silhouettes).
+	if not _path.is_empty():
+		var heading := _level.cell_center(_path[0]) - position
+		if heading.length_squared() > 0.01:
+			_face = heading.angle() + PI / 2.0
 	# Advance through as many cells as elapsed time allows (high-speed catch-up).
 	var step := speed * delta
 	var guard := 0
@@ -153,7 +161,11 @@ func _die() -> void:
 	if _dead:
 		return
 	_dead = true
-	GameState.add_gold(reward)
+	# Gold Mines boost kill gold (0.5%/level each, board-wide).
+	var gold_award := reward
+	if _level != null:
+		gold_award = int(round(reward * (1.0 + _level.gold_bonus())))
+	GameState.add_gold(gold_award)
 	GameState.score += reward
 	GameState.total_kills += 1
 	queue_free()
@@ -178,10 +190,14 @@ func _draw() -> void:
 func _draw_body() -> void:
 	var outline := Color(0, 0, 0, 0.5)
 	if is_boss:
+		# Rotate just the boss silhouette to face its heading, then restore the
+		# default transform so the health bar and status icons stay upright.
+		draw_set_transform(Vector2.ZERO, _face, Vector2.ONE)
 		match boss_kind:
 			"spider": _draw_spider()
-			"scorpion": _draw_scorpion()
+			"turtle": _draw_turtle()
 			_: _draw_beetle()
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	elif shape == "triangle":
 		var tri := _ngon(3, -PI / 2.0, radius * 1.18)
 		draw_colored_polygon(tri, color)
@@ -261,38 +277,29 @@ func _draw_spider() -> void:
 	draw_circle(Vector2(-r * 0.14, -r * 0.6), r * 0.08, dark)
 	draw_circle(Vector2(r * 0.14, -r * 0.6), r * 0.08, dark)
 
-## A top-down scorpion: oval body, two front claws, a curled segmented tail.
-func _draw_scorpion() -> void:
+## A top-down turtle: round domed shell with plates, a head, four stubby legs
+## and a little tail. Reads as "slow & armored".
+func _draw_turtle() -> void:
 	var r := radius
 	var dark := color.darkened(0.45)
+	var light := color.lightened(0.2)
 	var outline := Color(0, 0, 0, 0.55)
-	# Four walking legs per side.
-	for side in [-1.0, 1.0]:
-		for i in range(4):
-			var ly := -r * 0.3 + i * r * 0.3
-			draw_line(Vector2(side * r * 0.35, ly),
-				Vector2(side * r * 0.95, ly + (i - 1.5) * r * 0.2), dark, 2.6)
-	# Two front pincers (arm + claw).
-	for side in [-1.0, 1.0]:
-		var elbow := Vector2(side * r * 0.5, -r * 0.7)
-		draw_line(Vector2(side * r * 0.25, -r * 0.45), elbow, dark, 3.0)
-		var claw := elbow + Vector2(side * r * 0.1, -r * 0.45)
-		draw_line(elbow, claw, dark, 3.0)
-		draw_circle(claw, r * 0.16, dark)
-	# Body.
-	var body := _ellipse(r * 0.5, r * 0.82, 20)
-	draw_colored_polygon(body, color)
-	_draw_outline(body, outline)
-	# Curling tail of shrinking segments arching to one side, ending in a sting.
-	var seg := Vector2(0, r * 0.7)
-	var ang := 0.5
-	for i in range(5):
-		var nxt := seg + Vector2(sin(ang), cos(ang)) * (r * 0.34 - i * r * 0.03)
-		draw_line(seg, nxt, dark, 3.2 - i * 0.3)
-		draw_circle(nxt, (r * 0.14) - i * r * 0.015, dark)
-		seg = nxt
-		ang += 0.55
-	draw_circle(seg, r * 0.12, color.lightened(0.3))
+	# Head (front), tail (back) and four flippers poking out from under shell.
+	draw_circle(Vector2(0, -r * 0.95), r * 0.26, dark)
+	draw_circle(Vector2(0, r * 0.95), r * 0.16, dark)
+	for s in [-1.0, 1.0]:
+		for fy in [-0.55, 0.55]:
+			draw_circle(Vector2(s * r * 0.82, fy * r), r * 0.2, dark)
+	# Domed shell.
+	draw_circle(Vector2.ZERO, r * 0.82, color)
+	draw_arc(Vector2.ZERO, r * 0.82, 0.0, TAU, 32, outline, 2.0)
+	# Central plate plus a ring of scutes.
+	draw_circle(Vector2.ZERO, r * 0.3, light)
+	draw_arc(Vector2.ZERO, r * 0.3, 0.0, TAU, 16, dark, 1.6)
+	for i in range(6):
+		var a := TAU * i / 6.0
+		var c := Vector2(cos(a), sin(a)) * r * 0.55
+		draw_arc(c, r * 0.18, 0.0, TAU, 10, dark, 1.4)
 
 ## A row of small badges just under the enemy, one per active status effect
 ## (ice / poison / fire / vuln) so the player can see at a glance.

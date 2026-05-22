@@ -52,6 +52,20 @@ const TYPES := {
 		"range": 205.0, "fire_rate": 1.0, "damage": 52.0,
 		"bullet_color": Color(1.0, 0.62, 0.30), "slow": 0.0, "slow_time": 0.0, "aoe_radius": 82.0,
 	},
+	"gold": {
+		"name": "Gold Mine", "short": "Gold", "category": "tower", "mode": "support",
+		"cost": 60, "stock_key": "", "blocks": true,
+		"color": Color(0.95, 0.80, 0.20),
+		"range": 0.0, "fire_rate": 0.0, "damage": 0.0,
+		"bullet_color": Color.WHITE, "slow": 0.0, "slow_time": 0.0, "aoe_radius": 0.0,
+	},
+	"amplifier": {
+		"name": "Amplifier", "short": "Amp", "category": "tower", "mode": "support",
+		"cost": 80, "stock_key": "", "blocks": true,
+		"color": Color(0.80, 0.82, 0.86),
+		"range": 0.0, "fire_rate": 0.0, "damage": 0.0,
+		"bullet_color": Color.WHITE, "slow": 0.0, "slow_time": 0.0, "aoe_radius": 0.0,
+	},
 	"tar_trap": {
 		"name": "Tar Trap", "short": "Tar", "category": "trap", "mode": "",
 		"cost": 40, "stock_key": "", "blocks": false,
@@ -88,6 +102,10 @@ const TYPES := {
 		"bullet_color": Color.WHITE, "slow": 0.0, "slow_time": 0.0, "aoe_radius": 60.0,
 	},
 }
+
+## Per-level fraction the support towers grant: Gold Mine adds this much to
+## kill gold, Amplifier adds this much damage to each adjacent tower (0.5%/lvl).
+const SUPPORT_PCT_PER_LEVEL := 0.005
 
 static func data(type: String) -> Dictionary:
 	return TYPES[type]
@@ -152,9 +170,10 @@ static func trap_stats(type: String, level: int) -> Dictionary:
 	var d: Dictionary = TYPES[type].duplicate(true)
 	var n := level - 1
 	if type == "spike_trap":
-		# Linear +1.8 per level - aims for roughly 5% of enemy HP per pass
-		# at any matching wave (was +0.9, only ~2.5% per pass - too weak).
-		d["damage"] = 1.0 + 1.8 * n
+		# Flat floor only (kills early trash). The real scaling is a percent of
+		# the enemy's max HP, applied in Trap._process_contact so it tracks any
+		# wave and hurts tanks/bosses where flat damage is worthless.
+		d["damage"] = 2.0 + 2.0 * n
 	else:
 		d["damage"] = d["damage"] * pow(1.0 + 0.3 * n, 1.4)
 	if d["slow"] > 0.0:
@@ -166,6 +185,11 @@ static func trap_stats(type: String, level: int) -> Dictionary:
 	# Volcano radius does NOT grow per level - stays at the base 1-cell-around.
 	return d
 
-## Upgrade price scales with the piece's cost and level (triangular curve).
+## Upgrade price. Towers use a steep triangular curve (their damage scales
+## exponentially). Traps scale damage gently, so they use a cheap linear curve
+## - the triangular cost was wildly out of line with the small per-level gain.
 static func upgrade_cost(type: String, level: int) -> int:
-	return int(round(TYPES[type]["cost"] * level * (level + 1) / 2.0))
+	var base: float = TYPES[type]["cost"]
+	if category(type) == "trap":
+		return int(round(base * level))
+	return int(round(base * level * (level + 1) / 2.0))

@@ -38,7 +38,7 @@ func _draw() -> void:
 			row1 += 1
 
 func _is_boss_shape(shape: String) -> bool:
-	return shape == "beetle" or shape == "scorpion"
+	return shape == "beetle" or shape == "turtle"
 
 ## Draws a string and returns the x just past it.
 func _text(font: Font, fs: int, x: float, cy: float, s: String, col: Color) -> float:
@@ -57,16 +57,16 @@ func _draw_icon(c: Vector2, shape: String, col: Color) -> void:
 			draw_colored_polygon(_oval(c, r * 0.8, r * 1.0, 16), col)
 			draw_line(c + Vector2(0, -r * 0.5), c + Vector2(0, r * 0.9),
 				col.darkened(0.4), 1.6)
-		"scorpion":
+		"turtle":
 			var dk := col.darkened(0.4)
-			# Two front claws.
-			for side in [-1.0, 1.0]:
-				draw_circle(c + Vector2(side * r * 0.7, -r * 0.7), r * 0.26, dk)
-			# Body.
-			draw_colored_polygon(_oval(c, r * 0.55, r * 0.85, 16), col)
-			# Curled tail to the lower right.
-			draw_line(c + Vector2(0, r * 0.7), c + Vector2(r * 0.5, r * 0.5), dk, 1.8)
-			draw_circle(c + Vector2(r * 0.55, r * 0.35), r * 0.18, dk)
+			# Head + four little flippers, then the domed shell.
+			draw_circle(c + Vector2(0, -r * 0.85), r * 0.24, dk)
+			for s in [-1.0, 1.0]:
+				for fy in [-0.5, 0.5]:
+					draw_circle(c + Vector2(s * r * 0.7, fy * r), r * 0.2, dk)
+			draw_circle(c, r * 0.72, col)
+			draw_circle(c, r * 0.28, col.lightened(0.25))
+			draw_arc(c, r * 0.72, 0.0, TAU, 16, dk, 1.4)
 		_:
 			draw_circle(c, r, col)
 

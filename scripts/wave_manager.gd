@@ -55,24 +55,18 @@ func waves_started() -> int:
 func next_is_boss() -> bool:
 	return _boss_count(_started + 1) > 0
 
-## Beetle/spider boss count. Boss waves land on 5, 15, 25, ... and the count
-## ramps 1, 2, 3 then +2 each wave: 5->1  15->2  25->3  35->5  45->7 ...
-## These all share the standard boss stats and are drawn as a random mix of
-## beetles and spiders.
+## Beetle/spider boss count. Boss waves land on 5, 15, 25, ... The count grows
+## +1 each boss wave but caps at 6 so late waves don't drown in bosses.
 func _boss_count(w: int) -> int:
 	if w % 10 != 5:
 		return 0
-	var n := (w - 5) / 10  # 0, 1, 2, 3, ...
-	if n <= 2:
-		return n + 1
-	return 3 + 2 * (n - 2)
+	return mini(6, (w - 5) / 10 + 1)  # 1,2,3,4,5,6,6,...
 
-## Scorpion boss count: one on the first boss wave, +1 every boss wave after.
-## Scorpions are slower and tankier than the standard bosses (see _scorpion_def).
-func _scorpion_count(w: int) -> int:
+## Turtle boss count: +1 each boss wave, capped at 4.
+func _turtle_count(w: int) -> int:
 	if w % 10 != 5:
 		return 0
-	return (w - 5) / 10 + 1  # wave 5->1, 15->2, 25->3, ...
+	return mini(4, (w - 5) / 10 + 1)  # 1,2,3,4,4,...
 
 ## The deploy style for wave w (rotates every wave so neighbors always differ).
 func _style_for(w: int) -> Dictionary:
@@ -114,56 +108,67 @@ func start_next_wave() -> void:
 		"interval": def["interval"], "timer": 0.0, "def": def,
 	})
 	# Boss waves layer their bosses on concurrent, randomly-paced timelines:
-	# a beetle/spider group plus a slower, tankier scorpion group.
+	# a beetle/spider group plus a slower, tankier turtle group.
 	if def["boss_count"] > 0:
 		_jobs.append({
 			"kind": "boss", "remaining": def["boss_count"],
 			"timer": randf_range(1.0, 5.0), "def": _boss_def(_started),
 		})
-	if def["scorpion_count"] > 0:
+	if def["turtle_count"] > 0:
 		_jobs.append({
-			"kind": "scorpion", "remaining": def["scorpion_count"],
-			"timer": randf_range(1.0, 5.0), "def": _scorpion_def(_started),
+			"kind": "turtle", "remaining": def["turtle_count"],
+			"timer": randf_range(1.0, 5.0), "def": _turtle_def(_started),
 		})
 	# The countdown to the NEXT wave begins as soon as this wave starts.
 	_countdown = _initial_countdown()
 	Events.wave_changed.emit(_started)
 
+## Per-enemy kill reward at wave w: +1 per wave (was +1 every 3 waves - too
+## slow to keep up with upgrade costs). Bosses are worth BOSS_REWARD_MULT x this.
+const BOSS_REWARD_MULT := 5
+
+func _base_reward(w: int) -> int:
+	return 2 + w
+
 func _build_def(w: int) -> Dictionary:
 	var hp := 20.0 + (w - 1) * 18.0
 	var spd := minf(135.0, 52.0 + (w - 1) * 3.5)
 	var count := mini(ENEMY_CAP, 6 + w * 2)
-	var reward := 3 + int(w / 3.0)
+	var reward := _base_reward(w)
 	var base_interval := maxf(0.30, 0.85 - (w - 1) * 0.03)
 	var s := _style_for(w)
+	# Total gold the whole wave is worth (normal enemies + all bosses at 5x).
+	var total_reward := count * reward \
+		+ (_boss_count(w) + _turtle_count(w)) * reward * BOSS_REWARD_MULT
 	return {
 		"hp": hp, "spd": spd, "count": count, "reward": reward,
+		"total_reward": total_reward,
 		"interval": base_interval * float(s["interval_mult"]),
 		"weights": s["weights"], "jitter": s["jitter"], "cluster": s["cluster"],
 		"style_name": s["name"], "color": Color(0.90, 0.35, 0.35), "radius": 11.0,
-		"boss_count": _boss_count(w), "scorpion_count": _scorpion_count(w),
+		"boss_count": _boss_count(w), "turtle_count": _turtle_count(w),
 	}
 
 ## Standard boss stats for wave w (beetles & spiders share these). HP trimmed
 ## (4.0 + w/10, was 6.0) since bosses now arrive alongside a full normal wave.
+## Worth 5x a normal enemy.
 func _boss_def(w: int) -> Dictionary:
 	var hp := (20.0 + (w - 1) * 18.0) * (4.0 + float(w) / 10.0)
 	var spd := minf(95.0, minf(135.0, 52.0 + (w - 1) * 3.5) * 0.7)
-	var reward := (3 + int(w / 3.0)) * 6
-	return {"hp": hp, "spd": spd, "reward": reward,
+	return {"hp": hp, "spd": spd, "reward": _base_reward(w) * BOSS_REWARD_MULT,
 		"color": Color(0.85, 0.20, 0.20), "radius": 22.0}
 
-## Scorpion stats: slower (60% of boss speed) and tankier, getting tankier each
-## boss level (x1.5 at wave 5, +0.2x each boss wave). Reward scales with HP.
-func _scorpion_def(w: int) -> Dictionary:
+## Turtle stats: slower (60% of boss speed) and tankier, getting tankier each
+## boss level (x1.5 at wave 5, +0.2x each boss wave). Worth 5x like other bosses.
+func _turtle_def(w: int) -> Dictionary:
 	var base: Dictionary = _boss_def(w)
 	var n := (w - 5) / 10  # 0, 1, 2, ...
 	var tank := 1.5 + 0.2 * n
 	return {
 		"hp": base["hp"] * tank,
 		"spd": base["spd"] * 0.6,
-		"reward": int(round(base["reward"] * tank)),
-		"color": Color(0.80, 0.45, 0.12), "radius": 24.0,
+		"reward": base["reward"],
+		"color": TURTLE_COLOR, "radius": 24.0,
 	}
 
 func _process(delta: float) -> void:
@@ -174,11 +179,11 @@ func _process(delta: float) -> void:
 		var job: Dictionary = _jobs[i]
 		job["timer"] -= delta
 		if job["timer"] <= 0.0:
-			if job["kind"] == "boss" or job["kind"] == "scorpion":
+			if job["kind"] == "boss" or job["kind"] == "turtle":
 				var k := mini(job["remaining"], randi_range(1, 3))
 				for _j in range(k):
-					if job["kind"] == "scorpion":
-						_spawn_boss(job["def"], "scorpion")
+					if job["kind"] == "turtle":
+						_spawn_boss(job["def"], "turtle")
 					else:
 						# Beetles and spiders are a random mix, same stats.
 						_spawn_boss(job["def"],
@@ -244,12 +249,17 @@ func _spawn_normal(def: Dictionary, type_index: int) -> void:
 	e.setup(level, def["hp"] * t["hp"], minf(175.0, def["spd"] * t["spd"]),
 		int(round(def["reward"] * t["reward"])), t["color"], t["radius"])
 
+## Distinct boss colors: blue beetles, red spiders, green turtles.
+const BEETLE_COLOR := Color(0.30, 0.45, 0.95)
+const TURTLE_COLOR := Color(0.23, 0.62, 0.36)
+
 func _spawn_boss(bdef: Dictionary, kind: String) -> void:
 	var e := Enemy.new()
 	level.enemies.add_child(e)
 	e.is_boss = true
 	e.boss_kind = kind
-	e.setup(level, bdef["hp"], bdef["spd"], bdef["reward"], bdef["color"], bdef["radius"])
+	var col: Color = BEETLE_COLOR if kind == "beetle" else bdef["color"]
+	e.setup(level, bdef["hp"], bdef["spd"], bdef["reward"], col, bdef["radius"])
 
 ## Weighted pick over [grunt, runner, tank] for the given style weights.
 func _pick_type(weights: Array) -> int:

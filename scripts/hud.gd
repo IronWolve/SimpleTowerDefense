@@ -5,8 +5,9 @@ extends CanvasLayer
 
 const BAR_Y := 600.0
 const APP_NAME := "Simple Tower Defense"
-const APP_VERSION := "v30"
+const APP_VERSION := "v33"
 const BUY_TYPES := ["tower", "ice", "laser", "cannon", "sniper", "missile",
+	"gold", "amplifier",
 	"wall", "tar_trap", "spike_trap", "poison_trap", "fire_trap", "volcano_trap"]
 const SPEEDS := [0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 20.0, 50.0, 100.0]
 const _H := "[font_size=17][color=#99a3d1][b]"
@@ -23,34 +24,34 @@ const HELP_TEXT := _H + "Controls" + _HE + \
 """Buy pieces from the bottom bar. Place a tower on a wall to replace it. Left-click a placed piece to upgrade, right-click to sell. Gold comes from kills. A wave won't start unless enemies have a path out.
 
 """ + _H + "Towers" + _HE + \
-"""Bullet and Sniper fire single shots; Cannon and Missile deal splash damage; Laser burns a continuous single-target beam; Ice is an AOE frost field - every enemy in range is slowed on each pulse. It deals no damage; it pulses slowly and exists purely to control crowds.
+"""Bullet and Sniper fire single shots; Cannon and Missile deal splash damage; Laser burns a continuous single-target beam; Ice is an AOE frost field - every enemy in range is slowed on each pulse (no damage). Two support towers don't attack: Gold Mine raises the gold you earn from kills (+0.5%/level, all of them stack), and Amplifier adds +0.5%/level damage to the 8 towers touching it (place it in the middle of a cluster).
 
 """ + _H + "Traps" + _HE + \
 """Tar slows, Spike damages on contact, Poison and Fire burn over time (Poison also makes enemies take extra damage from everything), Volcano erupts every second and damages every enemy in its area.
 
 """ + _H + "Enemies & Waves" + _HE + \
-"""Runners are fast and resist Poison; Tanks are slow, tough and resist Fire. Each wave rotates a deploy style - Steady, Swarm (fast packs), Heavy (tanks), Squads (same-type bursts) - so no two in a row feel alike; the Next-wave label shows which. Boss waves hit at 5, 15, 25, ... with growing boss counts (1, 2, 3, 5, 7, ...) - a mix of beetles and spiders - trickled in 1-3 at a time alongside that wave's normal enemies. Each boss wave also brings tanky, slow Scorpions (1 at wave 5, +1 each boss wave) that get tougher every boss level. Auto sends waves for you. With the 30s round timer on, sending a non-boss wave early grants bonus gold that grows +2% per wave.
+"""Runners are fast and resist Poison; Tanks are slow, tough and resist Fire. Each wave rotates a deploy style - Steady, Swarm (fast packs), Heavy (tanks), Squads (same-type bursts) - so no two in a row feel alike; the Next-wave label shows which. Boss waves hit at 5, 15, 25, ... with growing boss counts (1, 2, 3, 5, 7, ...) - a mix of beetles and spiders - trickled in 1-3 at a time alongside that wave's normal enemies. Each boss wave also brings tanky, slow Turtles (1 at wave 5, +1 each boss wave) that get tougher every boss level. Auto sends waves for you. With the 30s round timer on, sending a non-boss wave early grants bonus gold that grows +2% per wave.
 
 """ + _H + "Modifiers (Options)" + _HE + \
 """Toggle in Options: Hard mode (no bonus lives, 40% less starting gold), Unlimited lives / money, No-cost walls, 30s round timer with early-send bonus, hold-drag wall building. Settings persist across sessions.
 
 """ + _H + "Maps & Editor" + _HE + \
-"""In Options pick a pre-built map (Open field, Maze, Fun Map, Spiral) or build your own: enable No-cost walls, lay out your walls in-game, type a name and press Save. Saved maps appear in the dropdown as "Custom - name". Click Maps Folder to open the save directory in your file manager (desktop only).
+"""In Options pick a pre-built map (Open field, Maze, Fun Map, Spiral), choose Generate for a fresh random tested maze each New Game (sized to the board), or build your own: enable No-cost walls, lay out your walls in-game, type a name and press Save. Saved maps appear in the dropdown as "Custom - name". Click Maps Folder to open the save directory in your file manager (desktop only).
 
-""" + _H + "Tower Stats   (Level 1 → Level 10)" + _HE + \
-"""[b]Bullet[/b]   15 dmg @ 1.0/s    →   109 dmg @ 3.25/s   (rate caps at 4.0/s)
-[b]Cannon[/b]   31 dmg @ 0.75/s, AOE 56   →   223 dmg @ 1.29/s, AOE 101
-[b]Laser[/b]    39 dmg, beam, single target   →   286 dmg, beam, single target
-[b]Ice[/b]      AOE @ 0.6/s: 5% slow 2.6s   →   @ 1.0/s: 59% slow 11.6s   (no damage)
-[b]Sniper[/b]   162 dmg @ 1.0/s   →   1 762 dmg @ 1.0/s   (rate ×2 / 30 lvl)
-[b]Missile[/b]  60 dmg @ 1.0/s, AOE 82   →   436 dmg @ 1.0/s, AOE 127   (rate ×2 / 30 lvl)
+""" + _H + "Tower Stats   (Level 1 -> Level 10)" + _HE + \
+"""[b]Bullet[/b]   15 dmg @ 1.0/s    ->   109 dmg @ 3.25/s   (rate caps at 4.0/s)
+[b]Cannon[/b]   31 dmg @ 0.75/s, AOE 56   ->   223 dmg @ 1.29/s, AOE 101
+[b]Laser[/b]    39 dmg, beam, single target   ->   286 dmg, beam, single target
+[b]Ice[/b]      AOE @ 0.6/s: 5% slow 2.6s   ->   @ 1.0/s: 59% slow 11.6s   (no damage)
+[b]Sniper[/b]   162 dmg @ 1.0/s   ->   1 762 dmg @ 1.0/s   (rate x2 / 30 lvl)
+[b]Missile[/b]  60 dmg @ 1.0/s, AOE 82   ->   436 dmg @ 1.0/s, AOE 127   (rate x2 / 30 lvl)
 
-""" + _H + "Trap Stats   (Level 1 → Level 10)" + _HE + \
-"""[b]Tar[/b]       slow 5% for as long as the enemy is on it   →   slow 90% (cap at L10), +10%/level
-[b]Spike[/b]     1 dps contact   →   17 dps contact   (≈5% of wave-N enemy HP per pass)
-[b]Poison[/b]    8 dps DoT for 3.9 s, +5% dmg taken   →   79 dps for 12.9 s, +14% dmg taken   (+1 s & +1%/level)
-[b]Fire[/b]      15 dps DoT for 1.95 s after stepping on it   →   148 dps for 10.95 s   (+1 s / level)
-[b]Volcano[/b]   erupts every 0.8 s, 19 dmg per pulse, AOE 60 (3x3 cells, fixed)   →   188 dmg per pulse"""
+""" + _H + "Trap Stats   (Level 1 -> Level 10)" + _HE + \
+"""[b]Tar[/b]       slow 5% for as long as the enemy is on it   ->   slow 90% (cap at L10), +10%/level
+[b]Spike[/b]     contact: 2 dps or 0.8%/s of max HP   ->   20 dps or 8%/s   (cap 12%/s; halved vs bosses)
+[b]Poison[/b]    8 dps DoT for 3.9 s, +5% dmg taken   ->   79 dps for 12.9 s, +14% dmg taken   (+1 s & +1%/level)
+[b]Fire[/b]      15 dps DoT for 1.95 s after stepping on it   ->   148 dps for 10.95 s   (+1 s / level)
+[b]Volcano[/b]   erupts every 0.8 s, 19 dmg per pulse, AOE 60 (3x3 cells, fixed)   ->   188 dmg per pulse"""
 
 var wave_manager: WaveManager
 var level: Level
@@ -253,15 +254,16 @@ func _build_bar() -> void:
 	bar.add_child(_wave_label)
 	bar.add_child(_score_label)
 
-	# Row 1: wall + the four towers. Row 2: the traps.
+	# Row 1: the 8 towers. Row 2: wall + the 5 traps. Buttons are narrow with
+	# two-line labels (name / cost) so all 8 fit before the info panel at x=624.
 	var bx := 150
 	var by := 8
 	for idx in BUY_TYPES.size():
 		var t: String = BUY_TYPES[idx]
-		if idx == 6:
+		if idx == 8:
 			bx = 150
 			by = 56
-		var b := _make_button("", Vector2(bx, by), Vector2(74, 44), 11)
+		var b := _make_button("", Vector2(bx, by), Vector2(56, 44), 10)
 		b.toggle_mode = true
 		b.toggled.connect(_on_buy_toggled.bind(t))
 		b.mouse_entered.connect(_on_buy_hovered.bind(t))
@@ -269,14 +271,14 @@ func _build_bar() -> void:
 		# Colored underline strip showing the piece's in-game color.
 		var strip := ColorRect.new()
 		strip.color = PieceData.TYPES[t]["color"]
-		strip.position = Vector2(5, 37)
-		strip.size = Vector2(64, 4)
+		strip.position = Vector2(4, 39)
+		strip.size = Vector2(48, 3)
 		strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		strip.modulate = Color(0.714, 0.714, 0.714)
 		b.add_child(strip)
 		bar.add_child(b)
 		_buy_buttons[t] = b
-		bx += 75
+		bx += 58
 
 	_info_label = _make_label(Vector2(624, 8), 13)
 	bar.add_child(_info_label)
@@ -303,7 +305,7 @@ func _build_bar() -> void:
 	_options_button.pressed.connect(_on_options_pressed)
 	bar.add_child(_options_button)
 
-	_start_button = _make_button("Start Wave", Vector2(1010, 4), Vector2(244, 52), 16)
+	_start_button = _make_button("Start Wave", Vector2(1010, 6), Vector2(250, 42), 15)
 	_start_button.pressed.connect(_on_start_pressed)
 	bar.add_child(_start_button)
 
@@ -320,7 +322,7 @@ func _build_bar() -> void:
 	_undo_button.pressed.connect(_on_undo_pressed)
 	bar.add_child(_undo_button)
 
-	_speed_button = _make_button(_speed_label(), Vector2(1114, 62), Vector2(146, 54), 11)
+	_speed_button = _make_button(_speed_label(), Vector2(1114, 62), Vector2(98, 26), 11)
 	_speed_button.tooltip_text = "Left-click: faster   Right-click: slower"
 	_speed_button.gui_input.connect(_on_speed_input)
 	bar.add_child(_speed_button)
@@ -372,7 +374,7 @@ func _build_options() -> void:
 	_options_root.add_child(panel)
 
 	var app_name := Label.new()
-	app_name.text = "%s   %s" % [APP_NAME, APP_VERSION]
+	app_name.text = "2026 - %s by IronWolve" % APP_NAME
 	app_name.position = Vector2(0, 4)
 	app_name.size = Vector2(460, 18)
 	app_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -420,7 +422,7 @@ func _build_options() -> void:
 	_map_name_input = LineEdit.new()
 	_map_name_input.position = Vector2(30, 294)
 	_map_name_input.size = Vector2(180, 30)
-	_map_name_input.placeholder_text = "name…"
+	_map_name_input.placeholder_text = "name..."
 	_map_name_input.add_theme_font_size_override("font_size", 14)
 	panel.add_child(_map_name_input)
 	_save_map_button = _make_button("Save", Vector2(220, 294), Vector2(80, 30), 14)
@@ -481,7 +483,8 @@ func _build_help() -> void:
 
 	var body := RichTextLabel.new()
 	body.bbcode_enabled = true
-	body.text = HELP_TEXT
+	# HELP_TEXT stores "->"; swap to the platform arrow (real "→" on desktop).
+	body.text = HELP_TEXT.replace("->", _arrow())
 	body.position = Vector2(32, 56)
 	body.size = Vector2(756, 456)
 	body.add_theme_font_size_override("normal_font_size", 14)
@@ -603,6 +606,7 @@ func _map_display_name(key: String) -> String:
 		"maze": return "Maze"
 		"fun": return "Fun Map"
 		"spiral": return "Spiral"
+		"generate": return "Generated"
 		_:
 			if key.begins_with("custom:"):
 				return key.substr(7)
@@ -636,7 +640,7 @@ func _fmt_play_time(secs: float) -> String:
 
 func _fmt_date(unix: int) -> String:
 	if unix <= 0:
-		return "—"
+		return "-"
 	var d := Time.get_datetime_dict_from_unix_time(unix)
 	return "%04d-%02d-%02d %02d:%02d" % [d.year, d.month, d.day, d.hour, d.minute]
 
@@ -710,7 +714,10 @@ func _on_lives_toggled(pressed: bool) -> void:
 	_refresh_stats()
 
 func _board_name() -> String:
-	return ["Normal", "Large", "Huge"][GameState.board_size]
+	var dim: Vector2i = Level.BOARD_SIZES[GameState.board_size]
+	# Width x Height.
+	return "%s  %dx%d" % [["Normal", "Large", "Huge"][GameState.board_size],
+		dim.x, dim.y]
 
 func _on_board_pressed() -> void:
 	GameState.board_size = (GameState.board_size + 1) % 3
@@ -731,6 +738,7 @@ func _refresh_map_select() -> void:
 	_map_select.add_item("Map:  Maze")        # 1 -> "maze"
 	_map_select.add_item("Map:  Fun Map")     # 2 -> "fun"
 	_map_select.add_item("Map:  Spiral")      # 3 -> "spiral"
+	_map_select.add_item("Map:  Generate (random)")  # 4 -> "generate"
 	_custom_map_names = GameState.list_custom_maps()
 	for name in _custom_map_names:
 		_map_select.add_item("Map:  Custom - " + name)
@@ -741,12 +749,13 @@ func _map_index_for(t: String) -> int:
 		"maze": return 1
 		"fun": return 2
 		"spiral": return 3
+		"generate": return 4
 		_:
 			if t.begins_with("custom:"):
 				var name := t.substr(7)
 				var k := _custom_map_names.find(name)
 				if k >= 0:
-					return 4 + k
+					return 5 + k
 			return 0
 
 func _map_type_for(idx: int) -> String:
@@ -754,9 +763,10 @@ func _map_type_for(idx: int) -> String:
 		1: return "maze"
 		2: return "fun"
 		3: return "spiral"
+		4: return "generate"
 		_:
-			if idx >= 4 and idx - 4 < _custom_map_names.size():
-				return "custom:" + _custom_map_names[idx - 4]
+			if idx >= 5 and idx - 5 < _custom_map_names.size():
+				return "custom:" + _custom_map_names[idx - 5]
 			return "none"
 
 ## Clears every lifetime stat back to zero and refreshes both the dashboard
@@ -837,8 +847,8 @@ func _connect_events() -> void:
 	Events.game_over.connect(func(): dismiss_popup(); _update_start())
 
 func _refresh_stats() -> void:
-	_gold_label.text = "Gold:  ∞" if GameState.unlimited_money else "Gold:  %d" % GameState.gold
-	_lives_label.text = "Lives:  ∞" if GameState.unlimited_lives \
+	_gold_label.text = "Gold:  unlimited" if GameState.unlimited_money else "Gold:  %d" % GameState.gold
+	_lives_label.text = "Lives:  unlimited" if GameState.unlimited_lives \
 		else "Lives:  %d" % GameState.lives
 	_wave_label.text = "Wave:  %d" % GameState.wave
 	_score_label.text = "Score:  %d" % GameState.score
@@ -847,12 +857,13 @@ func _refresh_buy_buttons() -> void:
 	for t in BUY_TYPES:
 		var d: Dictionary = PieceData.TYPES[t]
 		var key: String = d["stock_key"]
+		# Two lines: name on top, cost / stock below.
 		if t == "wall" and GameState.free_walls:
-			_buy_buttons[t].text = "Wall free"
+			_buy_buttons[t].text = "Wall\nfree"
 		elif key != "" and GameState.stock_of(key) > 0:
-			_buy_buttons[t].text = "%s x%d" % [d["short"], GameState.stock_of(key)]
+			_buy_buttons[t].text = "%s\nx%d" % [d["short"], GameState.stock_of(key)]
 		else:
-			_buy_buttons[t].text = "%s $%d" % [d["short"], d["cost"]]
+			_buy_buttons[t].text = "%s\n$%d" % [d["short"], d["cost"]]
 
 func _update_info() -> void:
 	if _hovered_structure != null and is_instance_valid(_hovered_structure):
@@ -886,23 +897,23 @@ func _update_wave_info() -> void:
 	var d := wave_manager.next_wave_def()
 	var style: String = d.get("style_name", "")
 	var bosses: int = d.get("boss_count", 0)
-	var scorpions: int = d.get("scorpion_count", 0)
-	var total_bosses := bosses + scorpions
+	var turtles: int = d.get("turtle_count", 0)
+	var total_bosses := bosses + turtles
 	var tag := "Wave %d - %s" % [n, style]
 	if total_bosses > 0:
 		tag = "Wave %d - %s + %d BOSS" % [n, style, total_bosses]
-	_wave_info_label.text = "Next - %s:   %d HP   %d enemies   $%d each" % [
-		tag, int(d["hp"]), int(d["count"]), int(d["reward"])]
+	_wave_info_label.text = "Next - %s:   %d HP   %d enemies   $%d total" % [
+		tag, int(d["hp"]), int(d["count"]), int(d.get("total_reward", 0))]
 	var ents := []
 	for t in WaveManager.ENEMY_TYPES:
 		ents.append({"shape": t["shape"], "color": t["color"],
 			"label": "%s (%s)" % [t["name"], t["desc"]]})
 	if bosses > 0:
-		ents.append({"shape": "beetle", "color": Color(0.85, 0.20, 0.20),
+		ents.append({"shape": "beetle", "color": WaveManager.BEETLE_COLOR,
 			"label": "Boss x%d" % bosses})
-	if scorpions > 0:
-		ents.append({"shape": "scorpion", "color": Color(0.80, 0.45, 0.12),
-			"label": "Scorpion x%d (tanky)" % scorpions})
+	if turtles > 0:
+		ents.append({"shape": "turtle", "color": WaveManager.TURTLE_COLOR,
+			"label": "Turtle x%d (tanky)" % turtles})
 	_enemy_legend.set_entries(ents)
 
 ## Called by Level with the piece under the cursor (or null) for the info panel.
@@ -919,11 +930,17 @@ func _type_info(t: String) -> String:
 		"wall":
 			line2 = "Blocks enemies - shape the maze."
 		"tower":
-			if d["mode"] == "beam":
+			var pct := PieceData.SUPPORT_PCT_PER_LEVEL * 100.0
+			if d["mode"] == "support":
+				if t == "gold":
+					line2 = "+%.1f%%/level gold from kills (all stack)" % pct
+				else:
+					line2 = "+%.1f%%/level damage to the 8 towers touching it" % pct
+			elif d["mode"] == "beam":
 				line2 = "continuous beam   %d dmg/s   range %d" % [
 					int(d["damage"]), int(d["range"])]
 			elif d["mode"] == "slow":
-				line2 = "chills 2+ enemies   slow %d%% for %.1fs   range %d" % [
+				line2 = "AOE slow   %d%% for %.1fs   range %d" % [
 					int(d["slow"] * 100.0), d["slow_time"], int(d["range"])]
 			else:
 				line2 = "range %d   dmg %d   %.1f/s" % [
@@ -1001,9 +1018,9 @@ func _speed_text(s: float) -> String:
 		return "Speed 1/%dx" % int(round(1.0 / s))
 	return "Speed %dx" % int(s)
 
-## Two-line speed button caption: current speed plus the click hint.
+## Compact speed-button caption (the L/R click hint lives in the tooltip).
 func _speed_label() -> String:
-	return "%s\nL: faster   R: slower" % _speed_text(SPEEDS[_speed_idx])
+	return _speed_text(SPEEDS[_speed_idx])
 
 func _on_auto_pressed() -> void:
 	if wave_manager == null:
@@ -1074,12 +1091,17 @@ func _reposition_popup() -> void:
 ## Second line of the upgrade popup: DPS now -> DPS after upgrade.
 ## For beams and DoT traps damage is already a per-second value; for everything
 ## else we multiply by fire_rate (or eruption rate for volcano).
+## The arrow glyph for "before -> after" text. Web's fallback font lacks the
+## real arrow (renders tofu), so use ">" there and the real "→" on desktop.
+func _arrow() -> String:
+	return ">" if OS.has_feature("web") else "→"
+
 func _dps_delta_text(s: Structure) -> String:
 	var now := _dps_at(s, s.level)
 	var nxt := _dps_at(s, s.level + 1)
 	if now <= 0.0 and nxt <= 0.0:
 		return ""
-	return "DPS %d → %d" % [int(round(now)), int(round(nxt))]
+	return "DPS %d %s %d" % [int(round(now)), _arrow(), int(round(nxt))]
 
 func _dps_at(s: Structure, level: int) -> float:
 	var cat: String = PieceData.category(s.type)
