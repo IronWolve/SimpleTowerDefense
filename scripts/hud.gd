@@ -5,7 +5,7 @@ extends CanvasLayer
 
 const BAR_Y := 600.0
 const APP_NAME := "Simple Tower Defense"
-const APP_VERSION := "v40"
+const APP_VERSION := "v41"
 const BUY_TYPES := ["tower", "ice", "laser", "cannon", "sniper", "missile",
 	"gold", "amplifier",
 	"wall", "tar_trap", "poison_trap", "fire_trap", "spike_trap", "volcano_trap"]
@@ -86,6 +86,7 @@ var _lives_toggle: CheckButton
 var _options_button: Button
 var _options_root: ColorRect
 var _help_root: ColorRect
+var _save_popup_root: ColorRect
 var _stats_root: ColorRect
 var _stats_body: RichTextLabel
 var _stats_body2: RichTextLabel
@@ -152,8 +153,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_Z:
 			_on_undo_pressed()
 		KEY_ESCAPE:
-			# Esc closes the topmost popup, else toggles options.
-			if _help_root != null and _help_root.visible:
+			# Esc closes the topmost popup, else toggles options. The Save/Load
+			# popup is topmost, so it closes first (before the options menu).
+			if _close_save_popup():
+				pass
+			elif _help_root != null and _help_root.visible:
 				_help_root.visible = false
 			elif _stats_root != null and _stats_root.visible:
 				_stats_root.visible = false
@@ -170,7 +174,9 @@ func _input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_RIGHT):
 		return
-	if _help_root != null and _help_root.visible:
+	if _close_save_popup():
+		get_viewport().set_input_as_handled()
+	elif _help_root != null and _help_root.visible:
 		_help_root.visible = false
 		get_viewport().set_input_as_handled()
 	elif _stats_root != null and _stats_root.visible:
@@ -696,10 +702,12 @@ func _on_load_game_pressed() -> void:
 ## save to Load / Delete. Named saves live under user://saves/. Runs while the
 ## game is paused (HUD is PROCESS_MODE_ALWAYS).
 func _show_save_popup() -> void:
+	_close_save_popup()  # never stack two
 	var root := ColorRect.new()
 	root.color = Color(0, 0, 0, 0.7)
 	root.size = Vector2(1280, 720)
 	add_child(root)
+	_save_popup_root = root
 	var panel := _make_panel(Vector2(390, 96), Vector2(500, 520))
 	root.add_child(panel)
 
@@ -775,8 +783,17 @@ func _show_save_popup() -> void:
 		panel.add_child(folder_btn)
 
 	var close_btn := _make_button("Close", Vector2(372, 444), Vector2(104, 46), 16)
-	close_btn.pressed.connect(func() -> void: root.queue_free())
+	close_btn.pressed.connect(_close_save_popup)
 	panel.add_child(close_btn)
+
+## Closes the Save/Load popup if open. Returns true if one was actually closed.
+func _close_save_popup() -> bool:
+	if _save_popup_root != null and is_instance_valid(_save_popup_root):
+		_save_popup_root.queue_free()
+		_save_popup_root = null
+		return true
+	_save_popup_root = null
+	return false
 
 func _on_continue_pressed() -> void:
 	_load_slot("auto")
