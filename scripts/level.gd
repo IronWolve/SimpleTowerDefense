@@ -194,16 +194,12 @@ func _build_generated_map() -> void:
 			if grid[r][c] == 1:
 				_place_map_wall(Vector2i(c, r))
 
-## The wall-gap row joining corridor i to corridor i+1 - alternates bottom/top
-## so the snake reverses direction each step. `start_down` flips the pattern.
-func _conn_row(i: int, start_down: bool) -> int:
-	var bottom := (i % 2 == 0) == start_down
-	return ROWS - 1 if bottom else 0
-
-## Returns a fresh 0/1 grid for the serpentine. Open columns sit on every even
-## x; the column between each pair is wall except one connecting gap. The first
-## corridor starts exactly at the spawn row and the last ends at the base row,
-## so there are no stub dead-ends at the entrance or exit.
+## Returns a fresh 0/1 grid for the serpentine. Vertical 1-wide corridors sit on
+## every even column, joined by a single gap to the next. The gap row alternates
+## between the bottom edge band and the top edge band, but its exact row is
+## RANDOM within that band, so every game winds differently while each lane still
+## crosses the middle (keeping spawn/base reachable). The first lane starts at
+## the spawn row, the last ends at the base row - no stub dead ends, one path.
 func _generate_serpentine(start_down: bool) -> Array:
 	var mid := ROWS / 2
 	var g: Array = []
@@ -218,27 +214,33 @@ func _generate_serpentine(start_down: bool) -> Array:
 		xs.append(x)
 		x += 2
 	var n := xs.size()
+	# Pre-roll each connector's row: alternating bottom/top band, random within.
+	var jit: int = maxi(1, ROWS / 4)
+	var conns: Array[int] = []
+	for i in range(n - 1):
+		var bottom: bool = (i % 2 == 0) == start_down
+		if bottom:
+			conns.append(randi_range(ROWS - 1 - jit, ROWS - 1))
+		else:
+			conns.append(randi_range(0, jit))
 	for i in range(n):
 		var cx: int = xs[i]
-		var conn: int = _conn_row(i, start_down)        # gap to corridor i+1
-		var prev_conn: int = _conn_row(i - 1, start_down)  # gap from corridor i-1
-		var lo: int
-		var hi: int
+		var a: int  # one end of this lane
+		var b: int  # the other end
 		if i == 0:
-			lo = mini(mid, conn)
-			hi = maxi(mid, conn)
+			a = mid
+			b = conns[0] if n > 1 else mid
 		elif i == n - 1:
-			lo = mini(mid, prev_conn)
-			hi = maxi(mid, prev_conn)
+			a = conns[i - 1]
+			b = mid
 		else:
-			lo = mini(prev_conn, conn)
-			hi = maxi(prev_conn, conn)
-		for y in range(lo, hi + 1):
+			a = conns[i - 1]
+			b = conns[i]
+		for y in range(mini(a, b), maxi(a, b) + 1):
 			g[y][cx] = 0
 		if i < n - 1:
-			g[conn][cx + 1] = 0  # the single connecting gap
-	# Spawn sits at the top/bottom end of corridor 0; base sits beside the last
-	# corridor's mid-row end. Force both open so the snake's mouths are clear.
+			g[conns[i]][cx + 1] = 0  # the single connecting gap
+	# Spawn ends lane 0; base sits beside the last lane's mid-row end.
 	g[spawn_cell.y][spawn_cell.x] = 0
 	g[base_cell.y][base_cell.x] = 0
 	g[mid][xs[n - 1]] = 0
