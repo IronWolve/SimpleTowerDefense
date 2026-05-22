@@ -124,9 +124,15 @@ func _build_custom_map(map_name: String) -> void:
 ## Alt-click bulk upgrade: tries to upgrade the structure up to 10 times,
 ## stopping early when can_upgrade() goes false or gold runs out.
 func _alt_upgrade_ten(s: Structure) -> void:
+	_bulk_upgrade(s, 10)
+
+## Upgrade a piece up to `limit` times, stopping when it can't upgrade further
+## or gold runs out. `limit` also guards against runaway loops (e.g. unlimited
+## money on a level-uncapped tower).
+func _bulk_upgrade(s: Structure, limit: int) -> void:
 	_begin_group()
 	var done := 0
-	while done < 10 and s.can_upgrade():
+	while done < limit and s.can_upgrade():
 		var cost: int = s.upgrade_cost()
 		if not GameState.spend(cost):
 			break
@@ -139,6 +145,30 @@ func _alt_upgrade_ten(s: Structure) -> void:
 		hud._show_structure_info(s)
 		if s.type == "gold" or s.type == "amplifier":  # gold-enhanced total may change
 			hud._update_wave_info()
+
+## Spend all available gold upgrading the currently-selected tower/trap (bound
+## to Q in the HUD). Stops at the piece's level cap or when gold runs out.
+func max_upgrade_selected() -> void:
+	var s := _selected
+	if s == null or not is_instance_valid(s) or not (s is Tower or s is Trap):
+		if hud != null:
+			hud.show_toast("Select a tower or trap first", 2.0)
+		return
+	if not s.can_upgrade():
+		if hud != null:
+			hud.show_toast("%s is already maxed" % s.display_name(), 2.0)
+		return
+	var limit := 100 if GameState.unlimited_money else 100000
+	var before := GameState.gold
+	_bulk_upgrade(s, limit)
+	if hud != null:
+		var spent := before - GameState.gold
+		if spent > 0:
+			hud.show_toast("Max upgrade: spent $%s" % GameState.abbrev(spent), 2.0)
+		elif GameState.unlimited_money:
+			hud.show_toast("Max upgrade", 1.5)
+		else:
+			hud.show_toast("Not enough gold to upgrade", 2.0)
 
 ## Returns the current wall layout as 0/1 strings, one per row.
 ## Towers and traps are ignored - this captures the map structure only.

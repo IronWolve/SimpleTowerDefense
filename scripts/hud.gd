@@ -5,7 +5,7 @@ extends CanvasLayer
 
 const BAR_Y := 600.0
 const APP_NAME := "Simple Tower Defense"
-const APP_VERSION := "v41"
+const APP_VERSION := "v42"
 const BUY_TYPES := ["tower", "ice", "laser", "cannon", "sniper", "missile",
 	"gold", "amplifier",
 	"wall", "tar_trap", "poison_trap", "fire_trap", "spike_trap", "volcano_trap"]
@@ -13,9 +13,9 @@ const SPEEDS := [0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 20.0, 50.0, 100.0]
 const _H := "[font_size=17][color=#99a3d1][b]"
 const _HE := "[/b][/color][/font_size]\n"
 const HELP_TEXT := _H + "Controls" + _HE + \
-"""Mouse wheel zooms; hold middle button and drag to pan when zoomed in. Speed button: left-click faster, right-click slower (1/4x to 100x). Pause freezes the game. Hold Alt and drag with any piece selected to place (or remove walls) in a straight line. Alt + left-click a placed turret upgrades it ten levels at once (stops when gold runs out). Alt + Send Wave (or Alt+Enter) queues the next 10 waves, fired one at a time.
+"""Mouse wheel zooms; hold middle button and drag to pan when zoomed in. Speed button: left-click faster, right-click slower (1/4x to 100x). Pause freezes the game. Hold Alt and drag with any piece selected to place (or remove walls) in a straight line. Alt + left-click a placed turret upgrades it ten levels at once (stops when gold runs out); select a tower/trap and press Q to pour all your remaining gold into maxing it out. Alt + Send Wave (or Alt+Enter) queues the next 10 waves, fired one at a time.
 
-[b]Keys:[/b] Space pauses, Enter sends the next wave, +/- adjusts speed, Esc toggles Options (or closes Help).
+[b]Keys:[/b] Space pauses, Enter sends the next wave, Q maxes out the selected tower, Z undoes, +/- adjusts speed, Esc toggles Options (or closes Help).
 
 """ + _H + "Goal" + _HE + \
 """Build a maze of walls to route enemies toward your towers and defend. Enemies that reach the exit cost lives - the run ends at zero. The game is endless; survive as long as you can. Best wave / score is shown on the game-over screen.
@@ -152,6 +152,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			_step_speed(-1)
 		KEY_Z:
 			_on_undo_pressed()
+		KEY_Q:
+			# Spend all gold maxing out the selected tower/trap.
+			if level != null:
+				level.max_upgrade_selected()
 		KEY_ESCAPE:
 			# Esc closes the topmost popup, else toggles options. The Save/Load
 			# popup is topmost, so it closes first (before the options menu).
