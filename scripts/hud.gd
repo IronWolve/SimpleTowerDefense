@@ -36,7 +36,7 @@ const HELP_TEXT := _H + "Controls" + _HE + \
 """Toggle in Options: Hard mode (no bonus lives, 40% less starting gold), Unlimited lives / money, No-cost walls, 30s round timer with early-send bonus, hold-drag wall building. Settings persist across sessions.
 
 """ + _H + "Maps & Editor" + _HE + \
-"""In Options pick a pre-built map (Open field, Maze, Fun Map, Spiral), choose Generate for a fresh random tested maze each New Game (sized to the board), or build your own: enable No-cost walls, lay out your walls in-game, type a name and press Save. Saved maps appear in the dropdown as "Custom - name". Click Maps Folder to open the save directory in your file manager (desktop only).
+"""In Options pick a pre-built map (Open field, Maze, Fun Map, Spiral), choose Generate for one continuous space-filling snake path - no dead ends, sized to the board, a fresh layout each New Game, or build your own: enable No-cost walls, lay out your walls in-game, type a name and press Save. Saved maps appear in the dropdown as "Custom - name". Click Maps Folder to open the save directory in your file manager (desktop only).
 
 """ + _H + "Tower Stats   (Level 1 -> Level 10)" + _HE + \
 """[b]Bullet[/b]   15 dmg @ 1.0/s    ->   109 dmg @ 3.25/s   (rate caps at 4.0/s)
@@ -305,7 +305,7 @@ func _build_bar() -> void:
 	_options_button.pressed.connect(_on_options_pressed)
 	bar.add_child(_options_button)
 
-	_start_button = _make_button("Start Wave", Vector2(1010, 6), Vector2(250, 42), 15)
+	_start_button = _make_button("Start Wave", Vector2(1010, 6), Vector2(202, 42), 15)
 	_start_button.pressed.connect(_on_start_pressed)
 	bar.add_child(_start_button)
 

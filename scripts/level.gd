@@ -180,77 +180,69 @@ func _build_maze() -> void:
 		gap_top = not gap_top
 		x += 4
 
-## Procedurally builds a winding maze sized to the current board, then verifies
-## a spawn->base route exists and is long enough (not a straight shot). Walls
-## are 1-wide corridors so there are no big open rooms. Retries until the BFS
-## test passes; the last grid is used regardless so a map always appears.
+## Builds a single continuous space-filling corridor (a serpentine snake) from
+## spawn to base. Vertical 1-wide corridors on every other column are joined end
+## to end by single gaps that alternate top/bottom, so the whole board is one
+## winding path with NO branches and NO dead ends - enemies must walk the entire
+## snake. Verified with BFS before stamping.
 func _build_generated_map() -> void:
-	var grid: Array = []
-	var min_len := COLS + ROWS  # demand some winding, not a beeline
-	for _attempt in range(24):
-		grid = _generate_maze()
-		if _grid_path_len(grid, spawn_cell, base_cell) >= min_len:
-			break
+	var grid := _generate_serpentine(randf() < 0.5)
+	if _grid_path_len(grid, spawn_cell, base_cell) < 0:
+		grid = _generate_serpentine(true)  # safety fallback (should never hit)
 	for r in range(ROWS):
 		for c in range(COLS):
 			if grid[r][c] == 1:
 				_place_map_wall(Vector2i(c, r))
 
-## Returns a fresh 0/1 grid (1=wall) carved by an iterative recursive
-## backtracker on the even-cell lattice, with spawn and base connected in.
-func _generate_maze() -> Array:
+## The wall-gap row joining corridor i to corridor i+1 - alternates bottom/top
+## so the snake reverses direction each step. `start_down` flips the pattern.
+func _conn_row(i: int, start_down: bool) -> int:
+	var bottom := (i % 2 == 0) == start_down
+	return ROWS - 1 if bottom else 0
+
+## Returns a fresh 0/1 grid for the serpentine. Open columns sit on every even
+## x; the column between each pair is wall except one connecting gap. The first
+## corridor starts exactly at the spawn row and the last ends at the base row,
+## so there are no stub dead-ends at the entrance or exit.
+func _generate_serpentine(start_down: bool) -> Array:
+	var mid := ROWS / 2
 	var g: Array = []
 	for r in range(ROWS):
 		var row: Array = []
 		for c in range(COLS):
 			row.append(1)
 		g.append(row)
-	# Start on the nearest even cell to the spawn so the spawn connects cleanly.
-	var sy := spawn_cell.y - (spawn_cell.y % 2)
-	g[sy][0] = 0
-	var stack: Array = [Vector2i(0, sy)]
-	var dirs := [Vector2i(2, 0), Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2)]
-	while not stack.is_empty():
-		var cur: Vector2i = stack[stack.size() - 1]
-		var opts: Array = []
-		for d in dirs:
-			var nb: Vector2i = cur + d
-			if nb.x >= 0 and nb.x < COLS and nb.y >= 0 and nb.y < ROWS \
-					and g[nb.y][nb.x] == 1:
-				opts.append(d)
-		if opts.is_empty():
-			stack.pop_back()
-			continue
-		var step: Vector2i = opts[randi() % opts.size()]
-		var nxt: Vector2i = cur + step
-		var mid: Vector2i = cur + step / 2  # wall between -> open
-		g[mid.y][mid.x] = 0
-		g[nxt.y][nxt.x] = 0
-		stack.append(nxt)
-	_carve_connect(g, spawn_cell)
-	_carve_connect(g, base_cell)
+	var xs: Array[int] = []
+	var x := 0
+	while x <= COLS - 1:
+		xs.append(x)
+		x += 2
+	var n := xs.size()
+	for i in range(n):
+		var cx: int = xs[i]
+		var conn: int = _conn_row(i, start_down)        # gap to corridor i+1
+		var prev_conn: int = _conn_row(i - 1, start_down)  # gap from corridor i-1
+		var lo: int
+		var hi: int
+		if i == 0:
+			lo = mini(mid, conn)
+			hi = maxi(mid, conn)
+		elif i == n - 1:
+			lo = mini(mid, prev_conn)
+			hi = maxi(mid, prev_conn)
+		else:
+			lo = mini(prev_conn, conn)
+			hi = maxi(prev_conn, conn)
+		for y in range(lo, hi + 1):
+			g[y][cx] = 0
+		if i < n - 1:
+			g[conn][cx + 1] = 0  # the single connecting gap
+	# Spawn sits at the top/bottom end of corridor 0; base sits beside the last
+	# corridor's mid-row end. Force both open so the snake's mouths are clear.
+	g[spawn_cell.y][spawn_cell.x] = 0
+	g[base_cell.y][base_cell.x] = 0
+	g[mid][xs[n - 1]] = 0
 	return g
-
-## Opens `cell` and, if it has no open orthogonal neighbour, walks toward the
-## board's vertical centre opening cells until it touches the carved maze.
-func _carve_connect(g: Array, cell: Vector2i) -> void:
-	g[cell.y][cell.x] = 0
-	if _has_open_neighbor(g, cell):
-		return
-	var p := cell
-	var stepdir := 1 if p.y < ROWS / 2 else -1
-	while p.y >= 0 and p.y < ROWS:
-		g[p.y][p.x] = 0
-		if _has_open_neighbor(g, p):
-			return
-		p.y += stepdir
-
-func _has_open_neighbor(g: Array, cell: Vector2i) -> bool:
-	for d in DIRS:
-		var nb := cell + d
-		if in_bounds(nb) and g[nb.y][nb.x] == 0 and nb != cell:
-			return true
-	return false
 
 ## BFS shortest-path length over open (0) cells, or -1 if unreachable.
 func _grid_path_len(g: Array, start: Vector2i, goal: Vector2i) -> int:
