@@ -5,17 +5,17 @@ extends CanvasLayer
 
 const BAR_Y := 600.0
 const APP_NAME := "Simple Tower Defense"
-const APP_VERSION := "v42"
+const APP_VERSION := "v47"
 const BUY_TYPES := ["tower", "ice", "laser", "cannon", "sniper", "missile",
 	"gold", "amplifier",
 	"wall", "tar_trap", "poison_trap", "fire_trap", "spike_trap", "volcano_trap"]
-const SPEEDS := [0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 20.0, 50.0, 100.0]
+const SPEEDS := [0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0, 16.0, 20.0, 50.0, 100.0, 1000.0]
 const _H := "[font_size=17][color=#99a3d1][b]"
 const _HE := "[/b][/color][/font_size]\n"
 const HELP_TEXT := _H + "Controls" + _HE + \
-"""Mouse wheel zooms; hold middle button and drag to pan when zoomed in. Speed button: left-click faster, right-click slower (1/4x to 100x). Pause freezes the game. Hold Alt and drag with any piece selected to place (or remove walls) in a straight line. Alt + left-click a placed turret upgrades it ten levels at once (stops when gold runs out); select a tower/trap and press Q to pour all your remaining gold into maxing it out. Alt + Send Wave (or Alt+Enter) queues the next 10 waves, fired one at a time.
+"""Mouse wheel zooms; hold middle button and drag to pan when zoomed in. Speed button: left-click faster, right-click slower (1/4x to 1000x). Pause freezes the game. Hold Alt and drag with any piece selected to place (or remove walls) in a straight line. Alt + left-click a placed turret upgrades it ten levels at once (stops when gold runs out); select a tower/trap and press Q to pour all your remaining gold into maxing it out. Alt + Send Wave (or Alt+Enter) queues the next 10 waves, fired one at a time.
 
-[b]Keys:[/b] Space pauses, Enter sends the next wave, Q maxes out the selected tower, Z undoes, +/- adjusts speed, Esc toggles Options (or closes Help).
+[b]Keys:[/b] [color=#f2d26b][b]Space[/b][/color] pauses, [color=#f2d26b][b]Enter[/b][/color] sends the next wave, [color=#f2d26b][b]T[/b][/color] sends 10 waves, [color=#f2d26b][b]Y[/b][/color] sends 100 waves, [color=#f2d26b][b]Q[/b][/color] maxes out the selected tower, [color=#f2d26b][b]D[/b][/color] toggles mass-delete (left-drag removes pieces, [color=#f2d26b][b]Alt[/b][/color] = a whole line), [color=#f2d26b][b]Z[/b][/color] undoes, [color=#f2d26b][b]+/-[/b][/color] adjusts speed, [color=#f2d26b][b]Esc[/b][/color] toggles Options (or closes Help).
 
 """ + _H + "Goal" + _HE + \
 """Build a maze of walls to route enemies toward your towers and defend. Enemies that reach the exit cost lives - the run ends at zero. The game is endless; survive as long as you can. Best wave / score is shown on the game-over screen.
@@ -24,7 +24,7 @@ const HELP_TEXT := _H + "Controls" + _HE + \
 """Buy pieces from the bottom bar. Place a tower on a wall to replace it. Left-click a placed piece to upgrade, right-click to sell. Gold comes from kills. A wave won't start unless enemies have a path out.
 
 """ + _H + "Towers" + _HE + \
-"""Bullet and Sniper fire single shots; Cannon and Missile deal splash damage; Laser burns a continuous single-target beam; Ice is an AOE frost field - every enemy in range is slowed on each pulse (no damage). Two support towers don't attack: Gold Mine raises the gold you earn from kills (+0.5%/level, all of them stack), and Amplifier adds +0.5%/level damage to the 8 towers touching it (place it in the middle of a cluster).
+"""Bullet and Sniper fire single shots; Cannon and Missile deal splash damage; Laser burns a continuous single-target beam; Ice is an AOE frost field - every enemy in range is slowed on each pulse (no damage). Two support towers don't attack: Gold Mine raises the gold you earn from kills (+0.5%/level, all of them stack), and Amplifier boosts everything the 8 pieces touching it do - +0.5%/level to damage, slow (capped 95%), damage-over-time and splash (AOE) area, plus an adjacent Gold Mine's rate (place it in the middle of a cluster).
 
 """ + _H + "Traps" + _HE + \
 """Tar slows, Spike damages on contact, Poison and Fire burn over time (Poison also makes enemies take extra damage from everything), Volcano erupts every second and damages every enemy in its area.
@@ -33,25 +33,26 @@ const HELP_TEXT := _H + "Controls" + _HE + \
 """Runners are fast and resist Poison; Tanks are slow, tough and resist Fire. Each wave rotates a deploy style - Steady, Swarm (fast packs), Heavy (tanks), Squads (same-type bursts) - so no two in a row feel alike; the Next-wave label shows which. Boss waves hit at 5, 15, 25, ... with growing boss counts (1, 2, 3, 5, 7, ...) - a mix of beetles and spiders - trickled in 1-3 at a time alongside that wave's normal enemies. Each boss wave also brings tanky, slow Turtles (1 at wave 5, +1 each boss wave) that get tougher every boss level. Auto sends waves for you. With the 30s round timer on, sending a non-boss wave early grants bonus gold that grows +2% per wave.
 
 """ + _H + "Modifiers (Options)" + _HE + \
-"""Toggle in Options: Hard mode (no bonus lives, 40% less starting gold), Unlimited lives / money, No-cost walls, 30s round timer with early-send bonus, hold-drag wall building. Settings persist across sessions.
+"""Toggle in Options: Hard mode (no bonus lives, 40% less starting gold), Unlimited lives / money, No-cost walls, 30s round timer with early-send bonus, hold-drag wall building. Settings persist across sessions. Options also has Save / Load (unlimited named saves to disk), Quit (with a save prompt), board-size selection, and lifetime Stats.
 
 """ + _H + "Maps & Editor" + _HE + \
 """In Options pick a pre-built map (Open field or Spiral), choose Generated for one continuous single-path labyrinth - no branches or dead ends, with a few solid 3x3 blocks to build tower clusters on (great for the Amplifier), a fresh layout each New Game (spawn/base move to the path's ends), or build your own: enable No-cost walls, lay out your walls in-game, type a name and press Save. Saved maps appear in the dropdown as "Custom - name". Click Maps Folder to open the save directory in your file manager (desktop only).
 
 """ + _H + "Tower Stats   (Level 1 -> Level 10)" + _HE + \
-"""[b]Bullet[/b]   15 dmg @ 1.0/s    ->   109 dmg @ 3.25/s   (rate caps at 4.0/s)
-[b]Cannon[/b]   31 dmg @ 0.75/s, AOE 56   ->   223 dmg @ 1.29/s, AOE 101
-[b]Laser[/b]    39 dmg, beam, single target   ->   286 dmg, beam, single target
+"""[b]Bullet[/b]   15 dmg @ 1.0/s    ->   127 dmg @ 3.25/s   (rate caps at 4.0/s)
+[b]Cannon[/b]   31 dmg @ 0.75/s, AOE 56   ->   259 dmg @ 1.29/s, AOE 101
+[b]Laser[/b]    39 dmg/s, beam, single target   ->   333 dmg/s, beam
 [b]Ice[/b]      AOE: 5% slow 2.6s   ->   ~22% slow 11.6s @ L10   (no damage; slow climbs to 80% by L40, up to 95% next to an Amplifier)
-[b]Sniper[/b]   162 dmg @ 1.0/s   ->   1 762 dmg @ 1.0/s   (rate x2 / 30 lvl)
-[b]Missile[/b]  60 dmg @ 1.0/s, AOE 82   ->   436 dmg @ 1.0/s, AOE 127   (rate x2 / 30 lvl)
+[b]Sniper[/b]   162 dmg @ 1.0/s   ->   1 759 dmg @ 1.0/s   (rate x2 / 30 lvl)
+[b]Missile[/b]  60 dmg @ 1.0/s, AOE 82   ->   509 dmg @ 1.0/s, AOE 127   (rate x2 / 30 lvl)
+Range and splash (AOE) stop growing at a cap, so a maxed tower can't blanket the whole map - but damage and fire rate keep scaling.
 
 """ + _H + "Trap Stats   (Level 1 -> Level 10)" + _HE + \
 """[b]Tar[/b]       no damage, pure slow: 5% while stood on   ->   ~22% @ L10, climbing to 80% at L40 (max); up to 95% next to an Amplifier
-[b]Poison[/b]    8 dps DoT for 3.9 s, +5% dmg taken   ->   79 dps for 12.9 s, +14% dmg taken   (+1 s & +1%/level)
-[b]Fire[/b]      15 dps DoT for 1.95 s after stepping on it   ->   148 dps for 10.95 s   (+1 s / level)
+[b]Poison[/b]    8 dps DoT for 3.9 s, +5% dmg taken   ->   50 dps for 12.9 s, +14% dmg taken   (+1 s & +1%/level)
+[b]Fire[/b]      15 dps DoT for 1.95 s after stepping on it   ->   94 dps for 10.95 s   (+1 s / level)
 [b]Spike[/b]     contact: 2 dps or 0.8%/s of max HP   ->   20 dps or 8%/s   (cap 12%/s; halved vs bosses)
-[b]Volcano[/b]   erupts every 0.8 s, 19 dmg per pulse, AOE 60 (3x3 cells, fixed)   ->   188 dmg per pulse"""
+[b]Volcano[/b]   erupts every 0.8 s, 19 dmg per pulse, AOE 60 (3x3 cells, fixed)   ->   119 dmg per pulse   (an Amplifier boosts damage and grows the area)"""
 
 var wave_manager: WaveManager
 var level: Level
@@ -63,6 +64,9 @@ var _lives_label: Label
 var _wave_label: Label
 var _score_label: Label
 var _info_label: Label
+## Framed popup (same flat panel style as the sell/upgrade popup) used to show a
+## hovered/selected tower or trap's stats over the info-box area.
+var _info_popup: Label
 var _wave_info_label: Label
 var _enemy_legend: EnemyLegend
 var _start_button: Button
@@ -87,6 +91,7 @@ var _options_button: Button
 var _options_root: ColorRect
 var _help_root: ColorRect
 var _save_popup_root: ColorRect
+var _quit_root: ColorRect
 var _stats_root: ColorRect
 var _stats_body: RichTextLabel
 var _stats_body2: RichTextLabel
@@ -156,15 +161,34 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			# Spend all gold maxing out the selected tower/trap.
 			if level != null:
 				level.max_upgrade_selected()
+		KEY_D:
+			# Toggle mass-delete mode (left-drag removes pieces; Alt = line).
+			if level != null:
+				level.toggle_delete_mode()
+		KEY_T:
+			# Queue the next 10 waves (single-key version of Alt-send).
+			if wave_manager != null and not GameState.game_over:
+				wave_manager.send_waves(10)
+				show_toast("Sending 10 waves", 1.5)
+		KEY_Y:
+			# Queue the next 100 waves, released as fast as the queue allows
+			# (one per frame, so ~1-2s instead of ~5s).
+			if wave_manager != null and not GameState.game_over:
+				wave_manager.send_waves(100, 0.0)
+				show_toast("Sending 100 waves", 2.0)
 		KEY_ESCAPE:
-			# Esc closes the topmost popup, else toggles options. The Save/Load
-			# popup is topmost, so it closes first (before the options menu).
-			if _close_save_popup():
+			# Esc closes the topmost popup, else toggles options. Transient modals
+			# (quit prompt, Save/Load popup) close first, before the options menu.
+			if _close_quit_prompt():
+				pass
+			elif _close_save_popup():
 				pass
 			elif _help_root != null and _help_root.visible:
 				_help_root.visible = false
 			elif _stats_root != null and _stats_root.visible:
 				_stats_root.visible = false
+			elif level != null and level.exit_delete_mode():
+				pass
 			else:
 				_set_options_visible(not _options_root.visible)
 
@@ -178,7 +202,9 @@ func _input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_RIGHT):
 		return
-	if _close_save_popup():
+	if _close_quit_prompt():
+		get_viewport().set_input_as_handled()
+	elif _close_save_popup():
 		get_viewport().set_input_as_handled()
 	elif _help_root != null and _help_root.visible:
 		_help_root.visible = false
@@ -232,13 +258,35 @@ func _on_reset_options_pressed() -> void:
 	_update_start()
 
 ## Transient status text shown at top-center for feedback messages.
+## The shared flat-panel frame (dark bg, thin blue-grey border, rounded corners)
+## used by the info popup and the toast. Fresh instance each call.
+func _popup_stylebox() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.16, 0.18, 0.22, 0.95)
+	sb.border_width_left = 1
+	sb.border_width_right = 1
+	sb.border_width_top = 1
+	sb.border_width_bottom = 1
+	sb.border_color = Color(0.40, 0.46, 0.60, 0.85)
+	sb.corner_radius_top_left = 3
+	sb.corner_radius_top_right = 3
+	sb.corner_radius_bottom_left = 3
+	sb.corner_radius_bottom_right = 3
+	sb.content_margin_left = 8
+	sb.content_margin_right = 8
+	sb.content_margin_top = 3
+	sb.content_margin_bottom = 3
+	return sb
+
 func _build_toast() -> void:
+	# Framed flat panel (same style as the info/upgrade popups), auto-sized to
+	# its text and centered horizontally near the top in show_toast().
 	_toast_label = Label.new()
 	_toast_label.position = Vector2(0, 14)
-	_toast_label.size = Vector2(1280, 22)
-	_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_toast_label.add_theme_font_size_override("font_size", 14)
-	_toast_label.add_theme_color_override("font_color", Color(0.95, 0.92, 0.55))
+	_toast_label.add_theme_color_override("font_color", Color(0.96, 0.97, 1.0))
+	_toast_label.add_theme_stylebox_override("normal", _popup_stylebox())
+	_toast_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_toast_label.visible = false
 	add_child(_toast_label)
 
@@ -247,6 +295,9 @@ func show_toast(text: String, seconds: float = 2.5) -> void:
 		return
 	_toast_label.text = text
 	_toast_label.visible = true
+	# Shrink the frame to the text, then center it horizontally on screen.
+	_toast_label.reset_size()
+	_toast_label.position = Vector2((1280.0 - _toast_label.size.x) / 2.0, 14.0)
 	_toast_until_ms = Time.get_ticks_msec() + int(seconds * 1000)
 
 func _build_bar() -> void:
@@ -294,6 +345,17 @@ func _build_bar() -> void:
 	# Tight line spacing so up to 3 lines fit above the divider.
 	_info_label.add_theme_constant_override("line_spacing", 0)
 	bar.add_child(_info_label)
+
+	# Framed popup for trap/turret stats - same flat panel as the sell/upgrade
+	# popup, sitting over the info-box area. Auto-sizes to its text.
+	_info_popup = Label.new()
+	_info_popup.add_theme_font_size_override("font_size", 10)
+	_info_popup.add_theme_constant_override("line_spacing", 0)
+	_info_popup.add_theme_stylebox_override("normal", _popup_stylebox())
+	_info_popup.position = Vector2(620, 0)
+	_info_popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_info_popup.visible = false
+	bar.add_child(_info_popup)
 
 	# Divider between the selected-piece info (top, up to 3 lines) and wave info.
 	var divider := ColorRect.new()
@@ -502,10 +564,16 @@ func _build_options() -> void:
 		GameState.drag_draw_walls, _on_drag_option_toggled)
 	panel.add_child(_drag_toggle)
 
-	var stats_btn := _make_button("Stats", Vector2(15, 638), Vector2(140, 46), 16)
+	var stats_btn := _make_button("Stats", Vector2(12, 638), Vector2(138, 46), 16)
 	stats_btn.pressed.connect(_on_stats_pressed)
 	panel.add_child(stats_btn)
-	var close := _make_button("Close", Vector2(305, 638), Vector2(140, 46), 18)
+	# Quit (with a save prompt). Pointless on web (browser tab), so hide it there.
+	var quit_btn := _make_button("Quit", Vector2(161, 638), Vector2(138, 46), 16)
+	quit_btn.pressed.connect(_on_quit_pressed)
+	if OS.has_feature("web"):
+		quit_btn.visible = false
+	panel.add_child(quit_btn)
+	var close := _make_button("Close", Vector2(310, 638), Vector2(138, 46), 18)
 	close.pressed.connect(_on_options_pressed)
 	panel.add_child(close)
 
@@ -802,6 +870,46 @@ func _close_save_popup() -> bool:
 func _on_continue_pressed() -> void:
 	_load_slot("auto")
 
+## Quit (Options). Asks whether to save the run first, then exits the game.
+func _on_quit_pressed() -> void:
+	_close_quit_prompt()  # never stack two
+	var root := ColorRect.new()
+	root.color = Color(0, 0, 0, 0.7)
+	root.size = Vector2(1280, 720)
+	add_child(root)
+	_quit_root = root
+	var panel := _make_panel(Vector2(420, 268), Vector2(440, 196))
+	root.add_child(panel)
+	var label := Label.new()
+	label.text = "Quit the game?\nSave your progress first?"
+	label.position = Vector2(20, 24)
+	label.size = Vector2(400, 72)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 17)
+	panel.add_child(label)
+	var save_quit := _make_button("Save & Quit", Vector2(16, 126), Vector2(160, 52), 15)
+	save_quit.pressed.connect(func() -> void:
+		if level != null and not GameState.game_over:
+			GameState.write_named_save("Quit save - Wave %d" % GameState.wave, level.serialize_run())
+		get_tree().quit())
+	panel.add_child(save_quit)
+	var just_quit := _make_button("Quit", Vector2(184, 126), Vector2(110, 52), 15)
+	just_quit.pressed.connect(func() -> void: get_tree().quit())
+	panel.add_child(just_quit)
+	var cancel := _make_button("Cancel", Vector2(302, 126), Vector2(122, 52), 15)
+	cancel.pressed.connect(_close_quit_prompt)
+	panel.add_child(cancel)
+
+## Close the quit prompt if open. Returns true if one was actually closed.
+func _close_quit_prompt() -> bool:
+	if _quit_root != null and is_instance_valid(_quit_root):
+		_quit_root.queue_free()
+		_quit_root = null
+		return true
+	_quit_root = null
+	return false
+
 ## A unique default save name (used when the name field is left blank), so the
 ## player can create any number of saves with a single click each.
 func _default_save_name() -> String:
@@ -1028,15 +1136,26 @@ func _structure_info_text(s: Structure) -> String:
 		txt += "\n" + enh
 	return txt
 
+## Routes info-box content: a tower/trap's stats show in the framed popup;
+## everything else (buy info, walls, empty) uses the plain label.
+func _set_info(struct: Structure, plain: String) -> void:
+	if struct != null and is_instance_valid(struct) and (struct is Tower or struct is Trap):
+		_info_popup.text = _structure_info_text(struct)
+		_info_popup.visible = true
+		_info_label.text = ""
+	else:
+		_info_popup.visible = false
+		_info_label.text = plain
+
 func _update_info() -> void:
 	if _hovered_structure != null and is_instance_valid(_hovered_structure):
-		_info_label.text = _structure_info_text(_hovered_structure)
+		_set_info(_hovered_structure, _structure_info_text(_hovered_structure))
 	elif _hovered_buy_type != "":
-		_info_label.text = _type_info(_hovered_buy_type)
+		_set_info(null, _type_info(_hovered_buy_type))
 	elif selected_type != "":
-		_info_label.text = _type_info(selected_type)
+		_set_info(null, _type_info(selected_type))
 	else:
-		_info_label.text = ""
+		_set_info(null, "")
 
 func _on_buy_hovered(t: String) -> void:
 	_hovered_buy_type = t
@@ -1050,7 +1169,7 @@ func _on_buy_unhovered(t: String) -> void:
 ## Force the info panel to a placed piece's current name and stats.
 func _show_structure_info(s: Structure) -> void:
 	if s != null and is_instance_valid(s):
-		_info_label.text = _structure_info_text(s)
+		_set_info(s, _structure_info_text(s))
 
 func _update_wave_info() -> void:
 	if wave_manager == null:

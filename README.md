@@ -11,9 +11,9 @@ An endless, maze-building tower defense game made in **Godot 4.6** (GL Compatibi
 - **Endless waves** with rotating *deploy styles* so no two waves feel the same.
 - **Boss waves** at 5, 15, 25, … with growing numbers of beetles, spiders, and slow, tanky turtles.
 - **Maps** — Open field, Spiral, or a procedurally **Generated** single-path labyrinth (a fresh layout each game), plus a built-in editor to paint and save your own.
-- **Save / load** — auto-saves each cleared wave (Continue after a loss) plus a manual save/load slot.
+- **Save / load** — save the **exact mid-game state** (board, economy, *and* live enemies) to **unlimited named save files** at any moment, plus an auto-save each cleared wave with a **Continue** button on the game-over screen.
 - **Difficulty modifiers** — Hard mode (no bonus lives, less gold), unlimited lives/money, free walls, round-timer gold bonus, board size, and more, all persisted between sessions.
-- **Quality of life** — undo, drag-to-place, bulk upgrades (Alt-click ×10), Alt-send the next 10 waves, abbreviated big numbers (12.3K / 4.5M), coverage caps so high-level towers don't blanket the whole map, lifetime stats, and high-speed graphics reduction for smooth fast-forwarding.
+- **Quality of life** — undo, drag-to-place, bulk upgrades (Alt-click ×10 or **Q** to dump all your gold into one tower), **mass-delete mode** (**D**), send the next **10 / 100 waves** (**T** / **Y**), abbreviated big numbers (12.3K / 4.5M), per-tower range/AOE caps so a maxed tower can't blanket the map, lifetime stats, a Quit-with-save option, and high-speed graphics reduction (up to 1000×).
 
 ![Options & settings](screenshots/options.jpg)
 
@@ -56,13 +56,20 @@ Towers and traps stop growing in *range/AOE* at a cap (so a maxed tower can't co
 | Right-click | Sell a piece |
 | Alt + drag | Place (or remove walls) in a straight line |
 | Alt + left-click | Upgrade a turret 10 levels at once |
-| Alt + Send Wave (or **Alt+Enter**) | Queue the next 10 waves, one every 0.5 s |
+| **Q** | Max out the selected tower (spend all your gold on it) |
+| **D** | Toggle mass-delete (left-drag removes pieces; Alt = a whole line) |
+| **T** / **Y** | Send the next 10 / 100 waves |
+| Alt + Send Wave (or **Alt+Enter**) | Queue the next 10 waves |
 | Mouse wheel | Zoom; middle-drag to pan |
 | **Space** | Pause |
 | **Enter** | Send next wave |
-| **+ / -** | Game speed (¼× to 100×) |
+| **+ / -** | Game speed (¼× to 1000×) |
 | **Z** | Undo |
-| **Esc** | Open/close Options (Save / Load are here) |
+| **Esc** | Close popups / exit delete mode / toggle Options (Save · Load · Quit live in Options) |
+
+## Releases
+
+See **[RELEASES.md](RELEASES.md)** for the version history and what changed in each build.
 
 ## Run from source
 

@@ -57,6 +57,9 @@ var _middle_held := false
 ## Cell where the current wall-drag started; used when Alt is held to draw a
 ## straight line from that cell to the cursor along the dominant axis.
 var _drag_start_cell := Vector2i(-1, -1)
+## Mass-delete mode (toggled with D): left-click / left-drag removes any piece
+## (Alt+drag removes a whole line), refunding like a sell.
+var _delete_mode := false
 ## Coalesced path-recompute: set true to request a single sweep next frame.
 var _paths_dirty := false
 ## Per-frame spatial bucketing of enemies. Updated once in `_process`.
@@ -963,11 +966,21 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		_update_hover(event.position)
 		# Drag handling:
+		#  - Mass-delete mode: left-drag removes pieces (Alt = whole line).
 		#  - Alt + left-drag with any selected piece: place in a straight line.
 		#  - Free-form left-drag for walls (with the option on): paint walls.
 		#  - Alt + right-drag for walls: remove in a line.
 		#  - Free-form right-drag for walls (option on): remove walls.
-		if _left_held and hud != null and hud.selected_type != "":
+		if _delete_mode and _left_held:
+			var dc := cell_at(to_local(event.position))
+			if Input.is_key_pressed(KEY_ALT) and _drag_start_cell.x >= 0:
+				_begin_group()
+				for c in _line_cells(_drag_start_cell, dc):
+					_remove_at(c)
+				_end_group()
+			else:
+				_remove_at(dc)
+		elif _left_held and hud != null and hud.selected_type != "":
 			var dc := cell_at(to_local(event.position))
 			var sel: String = hud.selected_type
 			if Input.is_key_pressed(KEY_ALT) and _drag_start_cell.x >= 0:
@@ -994,7 +1007,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		match event.button_index:
 			MOUSE_BUTTON_LEFT:
 				_left_held = event.pressed
-				if event.pressed and hud != null and hud.selected_type != "":
+				if event.pressed and (_delete_mode or (hud != null and hud.selected_type != "")):
 					_drag_start_cell = cell_at(to_local(event.position))
 			MOUSE_BUTTON_RIGHT:
 				_right_held = event.pressed
@@ -1019,12 +1032,18 @@ func _update_hover(pos: Vector2) -> void:
 	var c := cell_at(to_local(pos))
 	# Report the piece under the cursor so the HUD can show its stats.
 	hud.set_hovered_structure(_pieces.get(c))
-	if hud.selected_type == "":
+	var old := _hover_cell
+	if _delete_mode:
+		_hover_cell = c
+		_show_hover = true
+	elif hud.selected_type == "":
 		_show_hover = false
-		return
-	_hover_cell = c
-	_hover_ok = _can_place(c, hud.selected_type)
-	_show_hover = true
+	else:
+		_hover_cell = c
+		_hover_ok = _can_place(c, hud.selected_type)
+		_show_hover = true
+	if _hover_cell != old:
+		queue_redraw()
 
 func _on_click(pos: Vector2, is_right: bool) -> void:
 	if hud == null:
@@ -1039,6 +1058,13 @@ func _on_click(pos: Vector2, is_right: bool) -> void:
 	hud.dismiss_popup()
 	var c := cell_at(to_local(pos))
 	if not in_bounds(c):
+		return
+	# Mass-delete mode: left removes the piece under the cursor, right exits.
+	if _delete_mode:
+		if is_right:
+			toggle_delete_mode()
+		else:
+			_remove_at(c)
 		return
 	var existing: Structure = _pieces.get(c)
 	var sel := hud.selected_type
@@ -1230,6 +1256,33 @@ func sell_selected() -> void:
 	if hud != null:
 		hud.dismiss_popup()
 
+## Toggle mass-delete mode (bound to D). On entry, drop any selection so the
+## delete drag has the board to itself; toasts the new state.
+func toggle_delete_mode() -> void:
+	_delete_mode = not _delete_mode
+	if _delete_mode and hud != null:
+		hud.clear_selection()
+		hud.dismiss_popup()
+		_select_structure(null)
+	if hud != null:
+		hud.show_toast("Mass delete: ON  -  Alt+drag = line, D / right-click to exit"
+			if _delete_mode else "Mass delete: OFF", 2.5)
+	queue_redraw()
+
+## Turn mass-delete off if it's on (Esc handler). Returns true if it was on.
+func exit_delete_mode() -> bool:
+	if not _delete_mode:
+		return false
+	toggle_delete_mode()
+	return true
+
+## Remove any piece at cell `c` (used by mass-delete). Refund/stock/undo/repath
+## are all handled by _remove_structure.
+func _remove_at(c: Vector2i) -> void:
+	var p: Structure = _pieces.get(c)
+	if p != null:
+		_remove_structure(p)
+
 func upgrade_selected() -> void:
 	var s := _selected
 	if s == null or not is_instance_valid(s) or not s.can_upgrade():
@@ -1357,6 +1410,7 @@ func _on_piece_selected(type: String) -> void:
 	if hud != null:
 		hud.dismiss_popup()
 	if type != "":
+		_delete_mode = false  # picking a piece to place leaves delete mode
 		_select_structure(null)
 	else:
 		_show_hover = false
@@ -1402,11 +1456,15 @@ func _draw_door(c: Vector2i, frame: Color, slab: Color) -> void:
 ## Drawn by BuildOverlay (on top of all pieces) so hover/flash show over walls.
 func draw_build_overlay(ci: CanvasItem) -> void:
 	if _show_hover and in_bounds(_hover_cell):
-		var col := Color(0.35, 0.9, 0.4, 0.45) if _hover_ok else Color(0.95, 0.3, 0.3, 0.45)
+		var col: Color
+		if _delete_mode:
+			col = Color(0.95, 0.18, 0.18, 0.5)  # red: this cell's piece will be deleted
+		else:
+			col = Color(0.35, 0.9, 0.4, 0.45) if _hover_ok else Color(0.95, 0.3, 0.3, 0.45)
 		ci.draw_rect(Rect2(_hover_cell.x * CELL + 2, _hover_cell.y * CELL + 2,
 			CELL - 4, CELL - 4), col)
 		# AOE / range preview around the hover cell while placing.
-		if hud != null:
+		if hud != null and not _delete_mode:
 			var sel: String = hud.selected_type
 			if sel != "" and PieceData.TYPES.has(sel):
 				var cx := _hover_cell.x * CELL + CELL * 0.5

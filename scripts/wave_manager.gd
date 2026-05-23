@@ -51,10 +51,12 @@ var _started := 0
 var _jobs: Array = []
 var _countdown := -1.0
 var _bonus_lives_through := 0
-## Alt-send queue: extra waves still to auto-fire after the immediate one, on
-## QUEUE_INTERVAL cadence. Lets "send 10" stream out instead of stacking at once.
+## Alt-send queue: extra waves still to auto-fire after the immediate one. They
+## stream out one per `_queue_interval` (set per send, so a big "send 100" can
+## run faster than the normal Alt-send-10 cadence).
 var _queued_sends := 0
 var _queue_timer := 0.0
+var _queue_interval := QUEUE_INTERVAL
 
 func waves_started() -> int:
 	return _started
@@ -156,12 +158,13 @@ func can_start_wave() -> bool:
 ## Alt-send: launch the next wave now, then auto-fire the following ones one at
 ## a time as each wave's countdown elapses, up to `n` total. Spaced like normal
 ## pacing - unlike clicking n times, which would stack n waves simultaneously.
-func send_waves(n: int) -> void:
+func send_waves(n: int, interval := QUEUE_INTERVAL) -> void:
 	if not can_start_wave():
 		return
 	start_next_wave(true)
 	_queued_sends = maxi(0, n - 1)
-	_queue_timer = QUEUE_INTERVAL
+	_queue_interval = interval
+	_queue_timer = interval
 
 ## Bonus an Alt-sent wave pays: the maximum early-send bonus (full timer's worth)
 ## regardless of the live countdown, since Alt-send fires near-instantly. 0 on
@@ -305,7 +308,7 @@ func _tick_queue(delta: float) -> void:
 	_queue_timer -= delta
 	if _queue_timer > 0.0:
 		return
-	_queue_timer = QUEUE_INTERVAL
+	_queue_timer = _queue_interval
 	_queued_sends -= 1
 	start_next_wave(true)
 
