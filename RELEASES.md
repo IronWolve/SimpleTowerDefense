@@ -22,6 +22,28 @@ host), not opened straight from disk.
 
 ---
 
+## v52 — Cluster maps: hotfix
+
+The v51 cluster-style generator had two bugs that produced unplayable
+maps: a giant intact wall mass survived in the middle of every thinned
+map, and the rest of the board came out as salt-and-pepper single dots
+instead of L-corner / 2×2 / domino clusters.
+
+**Fixes**
+- The "protected" region is now exactly the deliberate 3×3 tower-cluster
+  spots the generator picked (tracked by lattice index in `_ham_blocked`),
+  not "any cell inside a solid 3×3 window." The earlier check false-fired
+  on accidental wall masses left behind when the Hamiltonian search didn't
+  reach a corner of the board, protecting huge regions.
+- Thinning switched from biased random culling to a **seed-and-grow**
+  algorithm that explicitly builds clusters of 2–4 cells (L-corners,
+  dominoes, 2×2s, T's, S's) until ~45% of the original wall mass is kept.
+  Single-cell singletons literally cannot occur — the algorithm refuses to
+  emit a cluster smaller than 2 cells.
+
+Same 50% chance per Generated map; same persisted seed so a "Same map"
+New Game replays the same layout.
+
 ## v51 — Cluster-style generated maps + health-bar polish
 
 **Generated maps: ruins-style variant**

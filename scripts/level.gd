@@ -364,83 +364,82 @@ func _build_generated_map() -> void:
 	randomize()
 
 ## Thin the wall mass in `grid` into scattered clusters (L-corners, 2x2s,
-## dominoes, single dots) with open gaps between - the "ruins" look instead
-## of a continuous corridor wall. The deliberate 3x3 solid blocks from
-## _generate_blocked are detected and preserved untouched, so the path's
-## tower-cluster spots survive. Mutates `grid` in place.
+## dominoes) with open gaps between - the "ruins" look instead of a
+## continuous corridor wall. The deliberate 3x3 tower-cluster blocks from
+## _generate_blocked (tracked in _ham_blocked by lattice index) are
+## preserved untouched. Mutates `grid` in place.
 ##
 ## Removing walls only frees space; the spawn->base path is in `grid` as
 ## empty cells already, so it can't be disconnected by thinning.
-func _thin_to_clusters(grid: Array, keep_pct: float) -> void:
-	# Pass 1: find the centres of fully-solid 3x3 wall squares and mark all 9
-	# of their cells as protected. Those came from _generate_blocked's
-	# deliberate tower-cluster spots.
+##
+## Algorithm: seed-and-grow. We pick random wall cells as cluster seeds and
+## grow each one along original-wall connectivity into a small shape (1-4
+## cells), marking grown cells as "keep". Everything else (non-protected,
+## non-kept) gets deleted. This BUILDS clusters explicitly instead of
+## culling randomly, so survivors are L-corners / dominoes / 2x2s, not
+## salt-and-pepper noise.
+func _thin_to_clusters(grid: Array, target_pct: float) -> void:
+	# Protect exactly the deliberate 3x3 block centres from _generate_blocked.
+	# _ham_blocked holds the lattice node indices; _hcell maps to board cell.
+	# (An earlier version scanned for solid 3x3 windows in the grid, but that
+	# false-positives on lattice fill where the path didn't reach - protecting
+	# huge accidental wall masses.)
 	var protect := {}
-	for r in range(1, ROWS - 1):
-		for c in range(1, COLS - 1):
-			if grid[r][c] != 1:
-				continue
-			var solid := true
-			for dr in [-1, 0, 1]:
-				for dc in [-1, 0, 1]:
-					if grid[r + dr][c + dc] != 1:
-						solid = false
-						break
-				if not solid:
-					break
-			if solid:
-				for dr in [-1, 0, 1]:
-					for dc in [-1, 0, 1]:
-						protect[Vector2i(c + dc, r + dr)] = true
+	for n in _ham_blocked:
+		var bc: Vector2i = _hcell(n)
+		for dr in [-1, 0, 1]:
+			for dc in [-1, 0, 1]:
+				protect[Vector2i(bc.x + dc, bc.y + dr)] = true
 
-	# Snapshot before mutation so the bias uses the original neighborhood,
-	# not the half-thinned one (otherwise the deletion cascade unevenly).
-	var orig: Array = []
-	for r in range(ROWS):
-		orig.append(grid[r].duplicate())
-
-	# Pass 2: biased culling. Keep probability tracks how many orthogonal
-	# neighbors are also walls in the original - dense interiors keep more
-	# than fringe singletons, naturally leaving small clusters.
+	# Gather every non-protected wall cell. We'll seed clusters from these.
+	var candidates: Array[Vector2i] = []
 	for r in range(ROWS):
 		for c in range(COLS):
-			if orig[r][c] != 1:
-				continue
-			if protect.has(Vector2i(c, r)):
-				continue
-			var n := 0
-			for d in DIRS:
-				var nr := r + d.y
-				var nc := c + d.x
-				if nr >= 0 and nr < ROWS and nc >= 0 and nc < COLS \
-						and orig[nr][nc] == 1:
-					n += 1
-			# 0 neighbors -> 25% keep; 2 -> keep_pct; 4 -> keep_pct + 0.20.
-			var keep := keep_pct + 0.10 * (n - 2)
-			if randf() > keep:
-				grid[r][c] = 0
+			if grid[r][c] == 1 and not protect.has(Vector2i(c, r)):
+				candidates.append(Vector2i(c, r))
+	candidates.shuffle()
 
-	# Pass 3: strip leftover salt-and-pepper. Any wall with 0 orthogonal
-	# wall neighbors AFTER pass 2 has a 70% chance of being culled too, so
-	# the survivors are clusters of 2+ cells (L-corners, dominoes, 2x2s)
-	# instead of stray dots.
-	var orig2: Array = []
-	for r in range(ROWS):
-		orig2.append(grid[r].duplicate())
+	var target_count := int(candidates.size() * target_pct)
+	var keep := {}
+
+	# Grow clusters one at a time until we've kept enough cells. Each seed
+	# spawns a cluster of 1-4 cells via random-direction flood fill along
+	# original-wall connectivity.
+	var i := 0
+	while keep.size() < target_count and i < candidates.size():
+		var seed: Vector2i = candidates[i]
+		i += 1
+		if keep.has(seed):
+			continue
+		var cluster_size := 2 + randi() % 3  # 2-4 cells: L, domino, 2x2, T
+		var stack: Array[Vector2i] = [seed]
+		var added := 0
+		while not stack.is_empty() and added < cluster_size:
+			var cell: Vector2i = stack.pop_back()
+			if keep.has(cell):
+				continue
+			if cell.x < 0 or cell.x >= COLS or cell.y < 0 or cell.y >= ROWS:
+				continue
+			if grid[cell.y][cell.x] != 1 or protect.has(cell):
+				continue
+			keep[cell] = true
+			added += 1
+			# Push neighbors in random order so cluster shapes vary.
+			var nbs: Array[Vector2i] = []
+			for d in DIRS:
+				nbs.append(cell + d)
+			nbs.shuffle()
+			for nb in nbs:
+				if not keep.has(nb):
+					stack.append(nb)
+			if keep.size() >= target_count:
+				break
+
+	# Delete every non-protected wall that didn't make it into a cluster.
 	for r in range(ROWS):
 		for c in range(COLS):
-			if orig2[r][c] != 1:
-				continue
-			if protect.has(Vector2i(c, r)):
-				continue
-			var n := 0
-			for d in DIRS:
-				var nr := r + d.y
-				var nc := c + d.x
-				if nr >= 0 and nr < ROWS and nc >= 0 and nc < COLS \
-						and orig2[nr][nc] == 1:
-					n += 1
-			if n == 0 and randf() < 0.7:
+			var p := Vector2i(c, r)
+			if grid[r][c] == 1 and not protect.has(p) and not keep.has(p):
 				grid[r][c] = 0
 
 ## Lattice <-> cell helpers (node index = j * NX + i).
