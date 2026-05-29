@@ -233,10 +233,15 @@ func _input(event: InputEvent) -> void:
 		dismiss_popup()
 		get_viewport().set_input_as_handled()
 
-## "New Game" restarts the run; first press arms, second press confirms.
-## With map_type "generate" the confirm step first asks whether to keep the
-## same generated layout or roll a new one.
+## "New Game" restarts the run. For most map types it's arm-then-confirm so
+## you can't restart on an accidental click. For Generated maps we skip the
+## arming step and go straight to the Same / New / Cancel popup - the popup's
+## Cancel button is already the backout, so a confirm step would be redundant.
 func _on_new_game_pressed() -> void:
+	if GameState.map_type == "generate":
+		_disarm_new_game()  # in case it was armed before the map changed
+		_show_generate_choice_popup()
+		return
 	if _new_game_armed:
 		_restart_with_map_choice()
 		return
@@ -993,9 +998,15 @@ func _default_save_name() -> String:
 	return "%s (%d)" % [base, i]
 
 ## Reload the scene resuming the given snapshot; main.gd applies pending_load.
+## A version mismatch is reported separately from "no save found" so the
+## player knows the file exists but is from an incompatible build.
 func _load_data(data: Dictionary) -> void:
 	if data.is_empty():
 		show_toast("No saved game found", 3.0)
+		return
+	if not GameState.is_save_compatible(data):
+		show_toast("Save is from an incompatible version (got v%d, expected v%d)" % [
+			int(data.get("v", 0)), GameState.SAVE_FORMAT_VERSION], 4.5)
 		return
 	GameState.pending_load = data
 	Engine.time_scale = 1.0

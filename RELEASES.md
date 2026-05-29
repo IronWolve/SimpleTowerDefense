@@ -11,10 +11,10 @@ Each release attaches four platform zips:
 
 | Platform | File |
 |---|---|
-| Windows | `std2d_win_vNN.zip` |
-| Linux | `std2d_linux_vNN.zip` |
-| macOS | `std2d_osx_vNN.zip` |
-| Web | `std2d_web_vNN.zip` |
+| Windows | `SimpleTowerDefense2D_win_vNN.zip` |
+| Linux | `SimpleTowerDefense2D_linux_vNN.zip` |
+| macOS | `SimpleTowerDefense2D_osx_vNN.zip` |
+| Web | `SimpleTowerDefense2D_web_vNN.zip` |
 
 **Notes:** the macOS build is unsigned — right-click → **Open** the first time to
 get past Gatekeeper. The Web build must be served over HTTP (a local server or
@@ -29,7 +29,7 @@ keys now match the 3D version), a wider economy pass, and a pile of polish.
 
 **Identity & UI**
 - Renamed to **Simple Tower Defense 2D** across the title bar, Options panel,
-  Help, README and downloads (`std2d_<plat>_vNN.zip` from this version onward).
+  Help, README and downloads (`SimpleTowerDefense2D_<plat>_vNN.zip`).
 - HUD bar gets a solid dark backing so it reads cleanly against the v48
   graphics (the old default-themed panel had gone too see-through).
 

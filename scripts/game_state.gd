@@ -14,6 +14,23 @@ const SETTINGS_PATH := "user://settings.cfg"
 ## Where custom maps saved from the editor are stored. One .txt per map.
 const MAPS_DIR := "user://maps"
 
+## Save / map format versions. Stamped into every save we write; the loader
+## refuses files whose version doesn't match. Bump deliberately whenever the
+## on-disk schema changes incompatibly (e.g. a renamed/removed field). Don't
+## bump for additive changes that read fine with a `.get(key, default)`.
+##
+## Tracked in CHECKLIST.md under "Save / load". When you bump one of these,
+## tick the matching item and add a one-line note to RELEASES so players know
+## why their old saves stopped loading.
+const SAVE_FORMAT_VERSION := 2
+const MAP_FORMAT_VERSION := 1
+
+## Old project name (from before the v49 rename). Used by the one-shot
+## startup migration to find user data left behind when Godot's user:// path
+## moved with the rename.
+const OLD_PROJECT_NAME := "Tower Defense"
+const NEW_PROJECT_NAME := "Simple Tower Defense 2D"
+
 var gold := STARTING_GOLD
 var lives := STARTING_LIVES
 var wave := 0
@@ -101,10 +118,100 @@ func abbrev(value: float) -> String:
 	return ("-" if neg else "") + s + _ABBREV_UNITS[mag - 1]
 
 func _ready() -> void:
+	_maybe_migrate_user_data()
 	load_settings()
 	if first_played_unix == 0:
 		first_played_unix = int(Time.get_unix_time_from_system())
 		save_settings()
+
+## One-shot user-data migration. The v49 rename to "Simple Tower Defense 2D"
+## moved Godot's user:// path (it's derived from project.config/name), which
+## stranded every save/map/setting under the OLD "Tower Defense" folder. This
+## checks the old folder, and if the new folder hasn't been used yet, copies
+## saves, the auto/manual slots, named saves, custom maps and settings over.
+## Idempotent: once anything's in the new folder, it does nothing.
+func _maybe_migrate_user_data() -> void:
+	var new_dir := OS.get_user_data_dir()
+	# Only run when this is actually the renamed project (someone forks the
+	# code under a different name? leave their data alone).
+	if not new_dir.contains(NEW_PROJECT_NAME):
+		return
+	var old_dir := new_dir.replace(NEW_PROJECT_NAME, OLD_PROJECT_NAME)
+	if old_dir == new_dir or not DirAccess.dir_exists_absolute(old_dir):
+		return
+	# Refuse if the new dir already has gameplay content - a player who has
+	# already played v49 must not have it overwritten by a stale older copy.
+	if _user_dir_has_content(new_dir):
+		return
+	# Copy single-file slots, then walk subdirectories.
+	_copy_file(old_dir + "/save_auto.json",   new_dir + "/save_auto.json")
+	_copy_file(old_dir + "/save_manual.json", new_dir + "/save_manual.json")
+	_copy_file(old_dir + "/settings.cfg",     new_dir + "/settings.cfg")
+	_copy_dir(old_dir + "/saves", new_dir + "/saves")
+	_copy_dir(old_dir + "/maps",  new_dir + "/maps")
+	print("Migrated user data from %s to %s" % [old_dir, new_dir])
+
+## True if the dir contains any save / map / settings file. Used to gate the
+## migration so it never overwrites in-progress v49 data.
+func _user_dir_has_content(dir: String) -> bool:
+	if FileAccess.file_exists(dir + "/save_auto.json"): return true
+	if FileAccess.file_exists(dir + "/save_manual.json"): return true
+	if FileAccess.file_exists(dir + "/settings.cfg"): return true
+	if _dir_has_files(dir + "/saves"): return true
+	if _dir_has_files(dir + "/maps"): return true
+	return false
+
+func _dir_has_files(dir: String) -> bool:
+	if not DirAccess.dir_exists_absolute(dir):
+		return false
+	var d := DirAccess.open(dir)
+	if d == null:
+		return false
+	d.list_dir_begin()
+	var n := d.get_next()
+	while n != "":
+		if not d.current_is_dir():
+			d.list_dir_end()
+			return true
+		n = d.get_next()
+	d.list_dir_end()
+	return false
+
+func _copy_file(src: String, dst: String) -> void:
+	if not FileAccess.file_exists(src):
+		return
+	var sf := FileAccess.open(src, FileAccess.READ)
+	if sf == null:
+		return
+	var data := sf.get_buffer(sf.get_length())
+	sf.close()
+	var df := FileAccess.open(dst, FileAccess.WRITE)
+	if df == null:
+		return
+	df.store_buffer(data)
+	df.close()
+
+func _copy_dir(src: String, dst: String) -> void:
+	if not DirAccess.dir_exists_absolute(src):
+		return
+	DirAccess.make_dir_recursive_absolute(dst)
+	var d := DirAccess.open(src)
+	if d == null:
+		return
+	d.list_dir_begin()
+	var n := d.get_next()
+	while n != "":
+		if not d.current_is_dir():
+			_copy_file(src + "/" + n, dst + "/" + n)
+		n = d.get_next()
+	d.list_dir_end()
+
+## True when the snapshot can be loaded by this build. We refuse mismatched
+## save versions cleanly (with a toast) instead of crashing on missing fields.
+func is_save_compatible(data: Dictionary) -> bool:
+	if data.is_empty():
+		return false
+	return int(data.get("v", 0)) == SAVE_FORMAT_VERSION
 
 func _process(delta: float) -> void:
 	# Count wall-clock seconds the user spent in the app (paused time included

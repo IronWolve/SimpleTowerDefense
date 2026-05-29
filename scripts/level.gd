@@ -235,7 +235,7 @@ func serialize_run() -> Dictionary:
 		if e != null and e.is_alive():
 			ens.append(e.serialize())
 	return {
-		"v": 2,
+		"v": GameState.SAVE_FORMAT_VERSION,
 		"board_size": GameState.board_size,
 		"spawn": [spawn_cell.x, spawn_cell.y],
 		"base": [base_cell.x, base_cell.y],

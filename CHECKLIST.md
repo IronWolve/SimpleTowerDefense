@@ -134,6 +134,16 @@ file (port, diverge, or N/A).
 
 ## Save / load
 
+### Format versions (`game_state.gd`)
+- [ ] `SAVE_FORMAT_VERSION` — current value: **2**. Bump when the save schema changes incompatibly (renamed field, removed field, semantic change). Don't bump for additive changes that read fine via `d.get(key, default)`.
+- [ ] `MAP_FORMAT_VERSION` — current value: **1**. Bump when the `user://maps/<name>.txt` format changes (e.g. adds a header line).
+- [ ] `serialize_run` stamps `"v": SAVE_FORMAT_VERSION` into every save
+- [ ] `is_save_compatible(data)` returns true only on exact match
+- [ ] Loader (`hud._load_data`) shows "Save is from an incompatible version (got vN, expected vM)" toast on mismatch (not the generic "not found")
+- [ ] When bumping: tick the constant here, add a one-liner to RELEASES so players know why old saves stopped loading
+- [ ] Bump history: v2 = first save format with the "v" stamp (pre-v49). v1 = no format stamp (legacy, never loadable post-v49)
+
+### Schema & flow
 - [ ] `Level.serialize_run()` schema covers: board pieces, economy, wave_state, live enemies (HP, pos, status), in-flight spawn jobs
 - [ ] `Enemy.serialize` / `deserialize` includes `leak_damage`
 - [ ] Missing-key fallback defaults are sane (`d.get(key, default)`)
@@ -142,6 +152,12 @@ file (port, diverge, or N/A).
 - [ ] Named saves write to `user://saves/`; map editor saves to `user://maps/`
 - [ ] Game-over Continue button only shows when `auto` save exists
 - [ ] Loading a save: HUD events re-emit so labels refresh
+
+### User-data migration (`game_state._maybe_migrate_user_data`)
+- [ ] Runs once at startup before `load_settings`
+- [ ] Only fires when the NEW user-data dir is empty (no `save_auto.json`, no `save_manual.json`, no `settings.cfg`, no `saves/` or `maps/` content)
+- [ ] Old project name: `"Tower Defense"`. New project name: `"Simple Tower Defense 2D"`. When renaming again, both constants need updating.
+- [ ] Copies: `save_auto.json`, `save_manual.json`, `settings.cfg`, every file under `saves/`, every file under `maps/`
 
 ---
 
@@ -191,6 +207,7 @@ Status snapshot (update after each change):
 - [ ] Linux export (`SimpleTowerDefense2D_linux_vNN.zip`)
 - [ ] macOS export (`SimpleTowerDefense2D_osx_vNN.zip`)
 - [ ] Web export (`SimpleTowerDefense2D_web_vNN.zip`)
+- [ ] Bare `SimpleTowerDefense2D_vNN.exe` copied alongside the zips in `/mnt/c/work/SimpleTowerDefense2D_build_vNN/` for one-click launch (no unzip needed)
 - [ ] Old version artifacts removed from deploy directory
 - [ ] `APP_VERSION` bumped before exporting
 - [ ] RELEASES.md entry written
