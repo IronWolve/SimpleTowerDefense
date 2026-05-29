@@ -2,6 +2,9 @@ class_name Enemy
 extends Node2D
 ## An enemy that navigates the grid cell-by-cell from spawn to base.
 
+## Shared visual style: opaque near-black outline used across every piece.
+const OUTLINE := Color(0.04, 0.04, 0.05)
+
 var cell := Vector2i.ZERO
 var base_speed := 60.0
 var speed := 60.0
@@ -220,6 +223,10 @@ func _die() -> void:
 	GameState.add_gold(gold_award)
 	GameState.score += reward
 	GameState.total_kills += 1
+	# Drifting "+gold" reward popup, in the wave-info gold colour.
+	if _level != null:
+		_level.spawn_float(position, "+%s" % GameState.abbrev(gold_award),
+			Color(0.96, 0.84, 0.46))
 	queue_free()
 
 func apply_slow(factor: float, duration: float) -> void:
@@ -230,6 +237,10 @@ func apply_slow(factor: float, duration: float) -> void:
 	speed = base_speed * (1.0 - _slow_factor)
 
 func _draw() -> void:
+	# Soft elliptical ground shadow under the enemy (sells the "grounded" feel).
+	draw_set_transform(Vector2(0, radius * 0.55), 0, Vector2(1.0, 0.40))
+	draw_circle(Vector2.ZERO, radius * 0.95, Color(0, 0, 0, 0.28))
+	draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
 	_draw_body()
 	_draw_status()
 	var frac := clampf(health / max_health, 0.0, 1.0)
@@ -240,7 +251,6 @@ func _draw() -> void:
 
 ## A distinct silhouette per archetype so types are told apart at a glance.
 func _draw_body() -> void:
-	var outline := Color(0, 0, 0, 0.5)
 	if is_boss:
 		# Rotate just the boss silhouette to face its heading, then restore the
 		# default transform so the health bar and status icons stay upright.
@@ -250,17 +260,24 @@ func _draw_body() -> void:
 			"turtle": _draw_turtle()
 			_: _draw_beetle()
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	elif shape == "triangle":
+		return
+	# Non-boss: body shape + opaque outline + a small upper-left lit highlight
+	# that fakes a top-light "molded" feel.
+	var lit := color.lightened(0.30)
+	var hl_off := Vector2(-radius * 0.25, -radius * 0.35)
+	var hl_r := radius * 0.32
+	if shape == "triangle":
 		var tri := _ngon(3, -PI / 2.0, radius * 1.18)
 		draw_colored_polygon(tri, color)
-		_draw_outline(tri, outline)
+		_draw_outline(tri, OUTLINE)
 	elif shape == "hexagon":
 		var hex := _ngon(6, PI / 6.0, radius)
 		draw_colored_polygon(hex, color)
-		_draw_outline(hex, outline)
+		_draw_outline(hex, OUTLINE)
 	else:
 		draw_circle(Vector2.ZERO, radius, color)
-		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 20, outline, 2.0)
+		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 24, OUTLINE, 2.0)
+	draw_circle(hl_off, hl_r, Color(lit.r, lit.g, lit.b, 0.45))
 
 func _ngon(sides: int, rot: float, r: float) -> PackedVector2Array:
 	var pts := PackedVector2Array()

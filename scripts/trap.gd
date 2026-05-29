@@ -15,6 +15,8 @@ const DOT_TIME := {"poison": 3.9, "fire": 1.95}
 const AOE_TYPES := {"volcano_trap": true}
 const ERUPT_PERIOD := 0.8
 const ERUPT_FLASH := 0.35
+## Shared visual style: opaque near-black outline used across every piece.
+const OUTLINE := Color(0.04, 0.04, 0.05)
 
 var slow := 0.0
 var dmg := 0.0
@@ -179,7 +181,19 @@ func _process_aoe(delta: float) -> void:
 
 func _draw() -> void:
 	var h := 17.0
+	# Soft elliptical ground shadow below the trap.
+	draw_set_transform(Vector2(0, 14), 0, Vector2(1.0, 0.40))
+	draw_circle(Vector2.ZERO, 16.0, Color(0, 0, 0, 0.26))
+	draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
+	# Opaque outline rect behind the body (shows ~2 px around the edges).
+	draw_rect(Rect2(-h - 1, -h - 1, (h + 1) * 2.0, (h + 1) * 2.0), OUTLINE)
+	# Body slab.
 	draw_rect(Rect2(-h, -h, h * 2.0, h * 2.0), color)
+	# Top-lit strip + bottom AO strip (fakes top-lighting on the flat tile).
+	var lit := color.lightened(0.28)
+	var dark := color.darkened(0.45)
+	draw_rect(Rect2(-h, -h, h * 2.0, 3.0), Color(lit.r, lit.g, lit.b, 0.60))
+	draw_rect(Rect2(-h, h - 3.0, h * 2.0, 3.0), Color(dark.r, dark.g, dark.b, 0.50))
 	match type:
 		"tar_trap":
 			draw_circle(Vector2(-6, -4), 5.0, Color(0.04, 0.04, 0.03))

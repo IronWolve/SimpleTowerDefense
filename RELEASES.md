@@ -22,6 +22,21 @@ host), not opened straight from disk.
 
 ---
 
+## v48 — Updated graphics
+
+A visual polish pass. Every piece now has a soft elliptical ground shadow, a
+crisp opaque outline, and a small top-lit highlight that fakes a "molded" feel
+on the flat shapes — without changing the no-assets identity. Boxy pieces
+(walls, traps) also get a top-lit edge strip and a bottom AO strip to read as
+solid floor tiles.
+
+**Effects**
+- Kills now spawn a drifting **`+gold`** popup in the wave-info gold colour.
+- Bullet impacts (single-target and AOE) burst a small set of **sparks** in the
+  projectile's colour.
+- Both effects auto-skip during reduced graphics (≥4×) so high-speed runs stay
+  smooth, with capped pools.
+
 ## v47 — Mass-delete, mid-game save/load & polish
 
 The biggest content drop yet: save your run at any moment, clear the board fast,

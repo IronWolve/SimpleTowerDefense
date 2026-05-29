@@ -96,6 +96,9 @@ func _hit() -> void:
 				e.take_damage(damage)
 				if slow > 0.0:
 					e.apply_slow(slow, slow_time)
+		# Bigger spark burst at the impact point for AOE shots.
+		if level_ref != null:
+			level_ref.spawn_sparks(_dest, color, 10)
 		_exploding = true
 		_boom = 0.0
 		queue_redraw()
@@ -104,6 +107,9 @@ func _hit() -> void:
 		target.take_damage(damage)
 		if slow > 0.0:
 			target.apply_slow(slow, slow_time)
+		# Small spark pop on a clean single-target hit.
+		if level_ref != null:
+			level_ref.spawn_sparks(target.position, color, 6)
 	queue_free()
 
 func _draw() -> void:

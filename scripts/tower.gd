@@ -5,6 +5,8 @@ extends Structure
 
 ## Projectile look per tower type (default is a small bullet).
 const BULLET_STYLE := {"cannon": "ball", "missile": "missile"}
+## Shared visual style: opaque near-black outline used across every piece.
+const OUTLINE := Color(0.04, 0.04, 0.05)
 
 var mode := "shot"
 var range_radius := 150.0
@@ -249,8 +251,18 @@ func _draw() -> void:
 	if selected and mode != "support" and range_radius > 0.0:
 		draw_circle(Vector2.ZERO, range_radius, Color(1, 1, 1, 0.06))
 		draw_arc(Vector2.ZERO, range_radius, 0.0, TAU, 48, Color(1, 1, 1, 0.40), 1.5)
-	draw_circle(Vector2.ZERO, 18.0, Color(0.12, 0.12, 0.15))
+	# Soft elliptical ground shadow below the tower (squished circle).
+	draw_set_transform(Vector2(0, 14), 0, Vector2(1.0, 0.42))
+	draw_circle(Vector2.ZERO, 16.0, Color(0, 0, 0, 0.30))
+	draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
+	# Opaque outline ring (2 px visible against the body inside).
+	draw_circle(Vector2.ZERO, 17.0, OUTLINE)
+	# Body disk.
 	draw_circle(Vector2.ZERO, 15.0, color)
+	# Top-lit highlight: a small lighter disk offset to upper-left of the body
+	# - this is what gives the flat disk a "molded" feel.
+	var lit := color.lightened(0.30)
+	draw_circle(Vector2(-3.5, -4.5), 8.5, Color(lit.r, lit.g, lit.b, 0.45))
 	_draw_type_glyph()
 	# Level badge in the lower-right corner.
 	var font := ThemeDB.fallback_font

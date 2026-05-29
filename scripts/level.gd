@@ -67,6 +67,16 @@ var _paths_dirty := false
 const BUCKET_SIZE := 160  # 4 cells per bucket
 var _enemy_buckets: Dictionary = {}
 
+## Visual polish: small pools of drifting "+gold" floats (on kills) and burst
+## sparks (on bullet impact). Pure data, ticked in _process, drawn in _draw.
+## Skipped during reduced-graphics mode so high speeds stay smooth.
+var _floats: Array = []
+var _sparks: Array = []
+const _FLOAT_TTL := 0.95
+const _SPARK_TTL := 0.35
+const _FLOAT_CAP := 60
+const _SPARK_CAP := 300
+
 func _ready() -> void:
 	var dim: Vector2i = BOARD_SIZES[clampi(GameState.board_size, 0, BOARD_SIZES.size() - 1)]
 	COLS = dim.x
@@ -760,7 +770,8 @@ func _make_container(n: String) -> Node2D:
 	add_child(c)
 	return c
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_tick_visuals(delta)
 	var now := Time.get_ticks_msec()
 	if now < _flash_until:
 		queue_redraw()
@@ -1276,6 +1287,91 @@ func exit_delete_mode() -> bool:
 	toggle_delete_mode()
 	return true
 
+## Spawn a "+text" label that drifts up and fades. Used for "+gold" kill rewards
+## and similar single-shot popups. Auto-skipped during reduced graphics.
+func spawn_float(pos: Vector2, text: String, col: Color) -> void:
+	if GameState.reduced_gfx():
+		return
+	_floats.append({
+		"pos": to_local(pos), "vel": Vector2(0.0, -34.0),
+		"text": text, "col": col, "age": 0.0,
+	})
+	if _floats.size() > _FLOAT_CAP:
+		_floats = _floats.slice(_floats.size() - _FLOAT_CAP)
+	queue_redraw()
+
+## Burst small sparks outward in `color` from `pos` - used on bullet/AOE hits.
+## Auto-skipped during reduced graphics (which is also where bullets are skipped).
+func spawn_sparks(pos: Vector2, col: Color, count := 6) -> void:
+	if GameState.reduced_gfx():
+		return
+	var local := to_local(pos)
+	for i in count:
+		var a := randf() * TAU
+		var s := randf_range(70.0, 150.0)
+		_sparks.append({
+			"pos": local, "vel": Vector2(cos(a), sin(a)) * s,
+			"col": col, "age": 0.0,
+		})
+	if _sparks.size() > _SPARK_CAP:
+		_sparks = _sparks.slice(_sparks.size() - _SPARK_CAP)
+	queue_redraw()
+
+## Tick the float and spark pools. Drift, age out, remove dead entries.
+func _tick_visuals(delta: float) -> void:
+	if _floats.is_empty() and _sparks.is_empty():
+		return
+	var i := 0
+	while i < _floats.size():
+		var f: Dictionary = _floats[i]
+		f["age"] += delta
+		f["pos"] += f["vel"] * delta
+		if f["age"] >= _FLOAT_TTL:
+			_floats.remove_at(i)
+			continue
+		i += 1
+	i = 0
+	while i < _sparks.size():
+		var s: Dictionary = _sparks[i]
+		s["age"] += delta
+		s["pos"] += s["vel"] * delta
+		s["vel"] *= pow(0.18, delta)  # quick decel
+		if s["age"] >= _SPARK_TTL:
+			_sparks.remove_at(i)
+			continue
+		i += 1
+	queue_redraw()
+
+## Draw the float/spark pools on top of every piece. Routed through the build
+## overlay (which renders last in the scene) so they're never hidden by towers.
+func _draw_visuals_to(ci: CanvasItem) -> void:
+	if _sparks.is_empty() and _floats.is_empty():
+		return
+	for s in _sparks:
+		var t: float = s["age"] / _SPARK_TTL
+		var alpha: float = 1.0 - t
+		var c: Color = s["col"]
+		var p: Vector2 = s["pos"]
+		ci.draw_rect(Rect2(p.x - 1.5, p.y - 1.5, 3.0, 3.0),
+			Color(c.r, c.g, c.b, alpha))
+	if _floats.is_empty():
+		return
+	var font := ThemeDB.fallback_font
+	var fs := 14
+	for f in _floats:
+		var t: float = f["age"] / _FLOAT_TTL
+		# Hold full alpha most of the way, fade out the last 35%.
+		var alpha: float = clampf((1.0 - t) / 0.35, 0.0, 1.0)
+		var c: Color = f["col"]
+		var p: Vector2 = f["pos"]
+		var tw: float = font.get_string_size(f["text"],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var anchor := p - Vector2(tw * 0.5, 0)
+		ci.draw_string(font, anchor + Vector2(1, 1), f["text"],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0, 0, 0, alpha * 0.7))
+		ci.draw_string(font, anchor, f["text"],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(c.r, c.g, c.b, alpha))
+
 ## Remove any piece at cell `c` (used by mass-delete). Refund/stock/undo/repath
 ## are all handled by _remove_structure.
 func _remove_at(c: Vector2i) -> void:
@@ -1488,3 +1584,5 @@ func draw_build_overlay(ci: CanvasItem) -> void:
 	if now < _flash_until and in_bounds(_flash_cell) and (now / 90) % 2 == 0:
 		ci.draw_rect(Rect2(_flash_cell.x * CELL + 2, _flash_cell.y * CELL + 2,
 			CELL - 4, CELL - 4), Color(0.95, 0.20, 0.20, 0.88))
+	# Float text and sparks render last so they're on top of every piece.
+	_draw_visuals_to(ci)
