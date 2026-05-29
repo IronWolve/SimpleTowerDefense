@@ -340,21 +340,14 @@ func _build_generated_map() -> void:
 	# them, ~85% coverage). Fall back to the full no-block labyrinth, then the
 	# simple serpentine, so a map always appears.
 	var grid: Array = []
-	var from_blocked := false
 	for _a in range(12):  # blocked gen succeeds ~50%/try; retry so blocks appear
 		grid = _generate_blocked()
 		if not grid.is_empty():
-			from_blocked = true
 			break
 	if grid.is_empty():
 		grid = _generate_hamiltonian()
 	if grid.is_empty():
 		grid = _generate_serpentine(randf() < 0.5)
-	# 50% chance to thin the wall mass into scattered L-corner / 2x2 / domino
-	# clusters with open gaps between. Only applied to the blocked generator
-	# because that one tags 3x3 tower-cluster spots we want to preserve.
-	if from_blocked and randf() < 0.5:
-		_thin_to_clusters(grid, 0.45)
 	for r in range(ROWS):
 		for c in range(COLS):
 			if grid[r][c] == 1:
@@ -362,85 +355,6 @@ func _build_generated_map() -> void:
 	# Restore non-deterministic randomness for everything else (waves, sparks,
 	# enemy jitter) - leaving the seed pinned would make the whole run replay.
 	randomize()
-
-## Thin the wall mass in `grid` into scattered clusters (L-corners, 2x2s,
-## dominoes) with open gaps between - the "ruins" look instead of a
-## continuous corridor wall. The deliberate 3x3 tower-cluster blocks from
-## _generate_blocked (tracked in _ham_blocked by lattice index) are
-## preserved untouched. Mutates `grid` in place.
-##
-## Removing walls only frees space; the spawn->base path is in `grid` as
-## empty cells already, so it can't be disconnected by thinning.
-##
-## Algorithm: seed-and-grow. We pick random wall cells as cluster seeds and
-## grow each one along original-wall connectivity into a small shape (1-4
-## cells), marking grown cells as "keep". Everything else (non-protected,
-## non-kept) gets deleted. This BUILDS clusters explicitly instead of
-## culling randomly, so survivors are L-corners / dominoes / 2x2s, not
-## salt-and-pepper noise.
-func _thin_to_clusters(grid: Array, target_pct: float) -> void:
-	# Protect exactly the deliberate 3x3 block centres from _generate_blocked.
-	# _ham_blocked holds the lattice node indices; _hcell maps to board cell.
-	# (An earlier version scanned for solid 3x3 windows in the grid, but that
-	# false-positives on lattice fill where the path didn't reach - protecting
-	# huge accidental wall masses.)
-	var protect := {}
-	for n in _ham_blocked:
-		var bc: Vector2i = _hcell(n)
-		for dr in [-1, 0, 1]:
-			for dc in [-1, 0, 1]:
-				protect[Vector2i(bc.x + dc, bc.y + dr)] = true
-
-	# Gather every non-protected wall cell. We'll seed clusters from these.
-	var candidates: Array[Vector2i] = []
-	for r in range(ROWS):
-		for c in range(COLS):
-			if grid[r][c] == 1 and not protect.has(Vector2i(c, r)):
-				candidates.append(Vector2i(c, r))
-	candidates.shuffle()
-
-	var target_count := int(candidates.size() * target_pct)
-	var keep := {}
-
-	# Grow clusters one at a time until we've kept enough cells. Each seed
-	# spawns a cluster of 1-4 cells via random-direction flood fill along
-	# original-wall connectivity.
-	var i := 0
-	while keep.size() < target_count and i < candidates.size():
-		var seed: Vector2i = candidates[i]
-		i += 1
-		if keep.has(seed):
-			continue
-		var cluster_size := 2 + randi() % 3  # 2-4 cells: L, domino, 2x2, T
-		var stack: Array[Vector2i] = [seed]
-		var added := 0
-		while not stack.is_empty() and added < cluster_size:
-			var cell: Vector2i = stack.pop_back()
-			if keep.has(cell):
-				continue
-			if cell.x < 0 or cell.x >= COLS or cell.y < 0 or cell.y >= ROWS:
-				continue
-			if grid[cell.y][cell.x] != 1 or protect.has(cell):
-				continue
-			keep[cell] = true
-			added += 1
-			# Push neighbors in random order so cluster shapes vary.
-			var nbs: Array[Vector2i] = []
-			for d in DIRS:
-				nbs.append(cell + d)
-			nbs.shuffle()
-			for nb in nbs:
-				if not keep.has(nb):
-					stack.append(nb)
-			if keep.size() >= target_count:
-				break
-
-	# Delete every non-protected wall that didn't make it into a cluster.
-	for r in range(ROWS):
-		for c in range(COLS):
-			var p := Vector2i(c, r)
-			if grid[r][c] == 1 and not protect.has(p) and not keep.has(p):
-				grid[r][c] = 0
 
 ## Lattice <-> cell helpers (node index = j * NX + i).
 func _hcell(n: int) -> Vector2i:
@@ -539,23 +453,52 @@ func _generate_blocked() -> Array:
 	if _ham_nx < 6 or _ham_ny < 5:
 		return []  # too small for blocks - let the full labyrinth handle it
 	var nx := _ham_nx
-	# Pick 3-4 well-separated interior block centres.
+	# Pick 3-5 well-separated block placements. Each placement is usually a
+	# single lattice node (3x3 wall mass), but 30% become a 2-node domino
+	# (3x5 or 5x3 wall mass) and 10% become a 2x2 lattice cluster (5x5 mass).
+	# This keeps the existing dense-maze look but gives some maps a chunkier
+	# "ruins" feel - the path still winds around every blocked region as a
+	# single-cell corridor. Smaller boards get fewer placements.
 	_ham_blocked = {}
-	var centres: Array = []
-	var want := 3 + (randi() % 2)
+	var nplace := 3 + randi() % 3  # 3-5 placements
 	var guard := 0
-	while centres.size() < want and guard < 200:
+	var placed := 0
+	while placed < nplace and guard < 300:
 		guard += 1
 		var i := 2 + randi() % (nx - 4)
 		var j := 1 + randi() % (_ham_ny - 2)
-		var n := j * nx + i
+		# Pick a shape relative to the anchor (i,j).
+		var shape: Array = []
+		var roll := randf()
+		if roll < 0.10 and i + 1 <= nx - 4 and j + 1 <= _ham_ny - 2:
+			# 2x2 lattice cluster: 5x5 wall mass.
+			shape = [Vector2i(i, j), Vector2i(i + 1, j),
+				Vector2i(i, j + 1), Vector2i(i + 1, j + 1)]
+		elif roll < 0.40:
+			# 2-node domino, horizontal or vertical: 3x5 or 5x3 mass.
+			if randf() < 0.5 and i + 1 <= nx - 4:
+				shape = [Vector2i(i, j), Vector2i(i + 1, j)]
+			elif j + 1 <= _ham_ny - 2:
+				shape = [Vector2i(i, j), Vector2i(i, j + 1)]
+			else:
+				shape = [Vector2i(i, j)]
+		else:
+			shape = [Vector2i(i, j)]  # single 3x3
+		# Must keep min Manhattan distance 3 from every previously-blocked node.
 		var ok := true
-		for c in centres:
-			if absi(c % nx - i) + absi(c / nx - j) < 3:
-				ok = false
+		for sn in shape:
+			for prev in _ham_blocked.keys():
+				var pi: int = prev % nx
+				var pj: int = prev / nx
+				if absi(pi - sn.x) + absi(pj - sn.y) < 3:
+					ok = false
+					break
+			if not ok:
+				break
 		if ok:
-			centres.append(n)
-			_ham_blocked[n] = true
+			for sn in shape:
+				_ham_blocked[sn.y * nx + sn.x] = true
+			placed += 1
 	var need := nx * _ham_ny - _ham_blocked.size()
 	# Best of several Warnsdorff fills (free endpoints).
 	var path: Array = []

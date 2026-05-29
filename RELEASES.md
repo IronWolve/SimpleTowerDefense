@@ -22,6 +22,31 @@ host), not opened straight from disk.
 
 ---
 
+## v53 — Generated maps: revert thinning, add block-shape variety
+
+The v51 / v52 "cluster thinning" was the wrong tool. It removed most of
+the wall mass and left maps full of empty space with scattered orphan
+dots - not what generated maps should look like. Both versions are
+abandoned. v53 reverts the thinning entirely and instead adds variety
+**inside** the existing block-placement step.
+
+**Reverted**
+- The `_thin_to_clusters` post-process is gone. `_build_generated_map`
+  is back to its v50 shape: pick a generator, stamp every wall cell.
+
+**New: varied block shapes**
+- `_generate_blocked` still places 3-5 well-separated lattice blocks the
+  path winds around, but each block now has a **random shape**:
+  - 60% chance — single lattice node (the classic 3×3 wall mass)
+  - 30% chance — 2-node domino (3×5 or 5×3 wall mass)
+  - 10% chance — 2×2 lattice cluster (5×5 wall mass)
+- So most maps look like the classic dense labyrinth; some have one or
+  two chunky 5×3 or 5×5 wall masses that give a more "ruined" feel.
+- The single-cell-wide corridor and dense maze structure are preserved
+  in every output - no empty-space failure mode.
+- Verified by dumping a half-dozen generations to ASCII before shipping
+  (something the v51 / v52 attempts skipped).
+
 ## v52 — Cluster maps: hotfix
 
 The v51 cluster-style generator had two bugs that produced unplayable
