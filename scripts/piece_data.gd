@@ -14,42 +14,42 @@ const TYPES := {
 		"name": "Bullet Tower", "short": "Bullet", "category": "tower", "mode": "shot",
 		"cost": 40, "stock_key": "tower", "blocks": true,
 		"color": Color(0.28, 0.52, 1.0),
-		"range": 150.0, "fire_rate": 1.0, "damage": 13.0,
+		"range": 75.0, "fire_rate": 1.0, "damage": 13.0,
 		"bullet_color": Color(0.45, 0.68, 1.0), "slow": 0.0, "slow_time": 0.0, "aoe_radius": 0.0,
 	},
 	"laser": {
 		"name": "Laser Tower", "short": "Laser", "category": "tower", "mode": "beam",
 		"cost": 200, "stock_key": "", "blocks": true,
 		"color": Color(0.88, 0.20, 0.20),
-		"range": 165.0, "fire_rate": 1.0, "damage": 34.0,
+		"range": 82.5, "fire_rate": 1.0, "damage": 34.0,
 		"bullet_color": Color(1.0, 0.45, 0.40), "slow": 0.0, "slow_time": 0.0, "aoe_radius": 0.0,
 	},
 	"ice": {
 		"name": "Ice Tower", "short": "Ice", "category": "tower", "mode": "slow",
 		"cost": 80, "stock_key": "", "blocks": true,
 		"color": Color(0.40, 0.80, 0.96),
-		"range": 138.0, "fire_rate": 0.6, "damage": 6.0,
+		"range": 69.0, "fire_rate": 0.6, "damage": 6.0,
 		"bullet_color": Color(0.72, 0.95, 1.0), "slow": 0.05, "slow_time": 2.6, "aoe_radius": 0.0,
 	},
 	"cannon": {
 		"name": "Cannon Tower", "short": "Cannon", "category": "tower", "mode": "shot",
 		"cost": 200, "stock_key": "", "blocks": true,
 		"color": Color(0.95, 0.55, 0.20),
-		"range": 145.0, "fire_rate": 0.75, "damage": 24.0,
+		"range": 72.5, "fire_rate": 0.75, "damage": 24.0,
 		"bullet_color": Color(1.0, 0.72, 0.32), "slow": 0.0, "slow_time": 0.0, "aoe_radius": 56.0,
 	},
 	"sniper": {
 		"name": "Sniper Tower", "short": "Sniper", "category": "tower", "mode": "shot",
 		"cost": 400, "stock_key": "", "blocks": true,
 		"color": Color(0.25, 0.35, 0.78),
-		"range": 230.0, "fire_rate": 1.0, "damage": 140.0,
+		"range": 115.0, "fire_rate": 1.0, "damage": 140.0,
 		"bullet_color": Color(0.65, 0.80, 1.0), "slow": 0.0, "slow_time": 0.0, "aoe_radius": 0.0,
 	},
 	"missile": {
 		"name": "Missile Tower", "short": "Missile", "category": "tower", "mode": "shot",
 		"cost": 400, "stock_key": "", "blocks": true,
 		"color": Color(0.30, 0.72, 0.32),
-		"range": 205.0, "fire_rate": 1.0, "damage": 52.0,
+		"range": 102.5, "fire_rate": 1.0, "damage": 52.0,
 		"bullet_color": Color(1.0, 0.62, 0.30), "slow": 0.0, "slow_time": 0.0, "aoe_radius": 82.0,
 	},
 	"gold": {
@@ -119,8 +119,8 @@ const SLOW_MAX_LEVEL := 40
 ## can't blanket the whole map. Range and AOE stop growing here; damage, fire
 ## rate and effects keep scaling. Reached at modest levels (L13-26).
 const RANGE_CAP := {
-	"tower": 360.0, "cannon": 320.0, "ice": 320.0,
-	"laser": 360.0, "missile": 440.0, "sniper": 600.0,
+	"tower": 160.0, "cannon": 180.0, "ice": 160.0,
+	"laser": 200.0, "missile": 220.0, "sniper": 300.0,
 }
 ## Splash radius ceilings (also clamps the Amplifier's AOE boost).
 const AOE_CAP := {
@@ -157,11 +157,11 @@ static func tower_stats(type: String, level: int) -> Dictionary:
 	if type == "cannon":
 		dmg_mult *= 1.05 * 1.05
 	d["damage"] = d["damage"] * pow(1.0 + dmg_step * n, dmg_exp) * dmg_mult
-	# Range bonus per level reduced 25% (was +20, now +15). Only pieces that
-	# actually have a range grow - support towers (Gold/Amp, base range 0) stay
-	# at 0 so they never sprout a meaningless range circle.
+	# Range grows +15, but only every 2 levels now (n / 2 is integer division),
+	# so it climbs half as fast. Support towers (Gold/Amp, base range 0) stay at
+	# 0 so they never sprout a meaningless range circle.
 	if d["range"] > 0.0:
-		d["range"] = d["range"] + 15.0 * n
+		d["range"] = d["range"] + 15.0 * (n / 2)
 		if RANGE_CAP.has(type):
 			d["range"] = minf(RANGE_CAP[type], d["range"])
 	# Fire rate: per-tower rules.

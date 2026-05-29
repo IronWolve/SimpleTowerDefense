@@ -8,6 +8,12 @@ const BULLET_STYLE := {"cannon": "ball", "missile": "missile"}
 ## Shared visual style: opaque near-black outline used across every piece.
 const OUTLINE := Color(0.04, 0.04, 0.05)
 
+## Minimum seconds between *visible* projectiles. A fast tower still does full
+## damage every shot, but only spawns a flying bullet this often; the extra
+## shots in between hit instantly. Keeps rapid fire from looking like a solid
+## laser stream while still reading as "this tower is shooting".
+const VISUAL_SHOT_INTERVAL := 0.22
+
 var mode := "shot"
 var range_radius := 150.0
 var fire_rate := 1.7
@@ -19,6 +25,7 @@ var slow_time := 0.0
 var aoe_radius := 0.0
 
 var _cooldown := 0.0
+var _visual_cd := 0.0  # counts down to the next visible projectile (see VISUAL_SHOT_INTERVAL)
 var _beam_targets: Array = []
 
 func _apply_stats() -> void:
@@ -87,6 +94,8 @@ func _process(delta: float) -> void:
 		_process_slow(delta)
 		return
 	_cooldown -= delta
+	if _visual_cd > 0.0:
+		_visual_cd -= delta
 	# Fire repeatedly if elapsed time allows, so high game speeds keep up.
 	var shots := 0
 	while _cooldown <= 0.0 and shots < 12:
@@ -94,7 +103,12 @@ func _process(delta: float) -> void:
 		if target == null:
 			_cooldown = 0.0
 			break
-		_fire(target)
+		# Only spawn a visible projectile every so often; faster shots hit
+		# instantly so a high fire rate doesn't read as a solid laser beam.
+		var show := _visual_cd <= 0.0
+		if show:
+			_visual_cd += VISUAL_SHOT_INTERVAL
+		_fire(target, show)
 		_cooldown += 1.0 / fire_rate
 		shots += 1
 
@@ -200,14 +214,17 @@ func _acquire_target() -> Enemy:
 			best = e
 	return best
 
-func _fire(target: Enemy) -> void:
-	# At high game speed, skip the flying projectile and apply damage instantly.
-	if GameState.reduced_gfx():
+func _fire(target: Enemy, show: bool = true) -> void:
+	# At high game speed, or when throttling the visible projectile rate, skip the
+	# flying bullet and apply damage instantly (same on-hit behaviour).
+	if not show or GameState.reduced_gfx():
 		_direct_hit(target)
 		return
 	var b := Bullet.new()
 	b.position = position
-	b.setup(target, _boosted_damage(), bullet_color, slow, slow_time, _boosted_aoe())
+	# Shots take the tower's BODY colour so each tower's ammo matches it (the old
+	# per-type bullet_colors overlapped - missile/cannon both orange, etc.).
+	b.setup(target, _boosted_damage(), color, slow, slow_time, _boosted_aoe())
 	b.retarget = type == "missile"
 	b.style = BULLET_STYLE.get(type, "bullet")
 	b.level_ref = level_ref

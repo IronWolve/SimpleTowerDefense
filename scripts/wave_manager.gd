@@ -357,6 +357,10 @@ func _spawn_normal(def: Dictionary, type_index: int) -> void:
 const BEETLE_COLOR := Color(0.30, 0.45, 0.95)
 const TURTLE_COLOR := Color(0.23, 0.62, 0.36)
 
+## Lives a boss drains if it reaches the base. Bosses leaking actually hurts now
+## (normal enemies still cost 1), and the slow tanky turtle costs the most.
+const BOSS_LEAK := {"beetle": 5, "spider": 5, "turtle": 8}
+
 func _spawn_boss(bdef: Dictionary, kind: String) -> void:
 	var e := Enemy.new()
 	level.enemies.add_child(e)
@@ -364,6 +368,7 @@ func _spawn_boss(bdef: Dictionary, kind: String) -> void:
 	e.boss_kind = kind
 	var col: Color = BEETLE_COLOR if kind == "beetle" else bdef["color"]
 	e.setup(level, bdef["hp"], bdef["spd"], bdef["reward"], col, bdef["radius"])
+	e.leak_damage = BOSS_LEAK.get(kind, 1)
 
 ## Weighted pick over [grunt, runner, tank] for the given style weights.
 func _pick_type(weights: Array) -> int:

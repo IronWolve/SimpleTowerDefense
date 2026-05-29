@@ -5,7 +5,7 @@ config_version=5
 
 [application]
 
-config/name="Tower Defense"
+config/name="Simple Tower Defense 2D"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 run/main_scene="res://scenes/main.tscn"
 

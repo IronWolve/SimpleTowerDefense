@@ -4,18 +4,18 @@ extends CanvasLayer
 ## Placed pieces use a floating popup for upgrade/sell.
 
 const BAR_Y := 600.0
-const APP_NAME := "Simple Tower Defense"
+const APP_NAME := "Simple Tower Defense 2D"
 const APP_VERSION := "v48"
 const BUY_TYPES := ["tower", "ice", "laser", "cannon", "sniper", "missile",
 	"gold", "amplifier",
 	"wall", "tar_trap", "poison_trap", "fire_trap", "spike_trap", "volcano_trap"]
-const SPEEDS := [0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0, 16.0, 20.0, 50.0, 100.0, 1000.0]
+const SPEEDS := [0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0, 16.0, 20.0, 50.0, 100.0, 500.0, 1000.0]
 const _H := "[font_size=17][color=#99a3d1][b]"
 const _HE := "[/b][/color][/font_size]\n"
 const HELP_TEXT := _H + "Controls" + _HE + \
-"""Mouse wheel zooms; hold middle button and drag to pan when zoomed in. Speed button: left-click faster, right-click slower (1/4x to 1000x). Pause freezes the game. Hold Alt and drag with any piece selected to place (or remove walls) in a straight line. Alt + left-click a placed turret upgrades it ten levels at once (stops when gold runs out); select a tower/trap and press Q to pour all your remaining gold into maxing it out. Alt + Send Wave (or Alt+Enter) queues the next 10 waves, fired one at a time.
+"""Mouse wheel zooms; hold middle button and drag to pan when zoomed in. Speed button: left-click faster, right-click slower (1/4x to 1000x). Pause freezes the game. Hold Alt and drag with any piece selected to place (or remove walls) in a straight line. Alt + left-click a placed turret upgrades it ten levels at once (stops when gold runs out). With a tower/trap selected: Q upgrades it once, W +10 levels, E +100, Shift+E pours all your remaining gold into maxing it out. Alt + Send Wave (or Alt+Enter) queues the next 10 waves, fired one at a time.
 
-[b]Keys:[/b] [color=#f2d26b][b]Space[/b][/color] pauses, [color=#f2d26b][b]Enter[/b][/color] sends the next wave, [color=#f2d26b][b]T[/b][/color] sends 10 waves, [color=#f2d26b][b]Y[/b][/color] sends 100 waves, [color=#f2d26b][b]Q[/b][/color] maxes out the selected tower, [color=#f2d26b][b]D[/b][/color] toggles mass-delete (left-drag removes pieces, [color=#f2d26b][b]Alt[/b][/color] = a whole line), [color=#f2d26b][b]Z[/b][/color] undoes, [color=#f2d26b][b]+/-[/b][/color] adjusts speed, [color=#f2d26b][b]Esc[/b][/color] toggles Options (or closes Help).
+[b]Keys:[/b] [color=#f2d26b][b]Space[/b][/color] pauses, [color=#f2d26b][b]Enter[/b][/color] sends the next wave, [color=#f2d26b][b]T[/b][/color] sends 10 waves, [color=#f2d26b][b]Y[/b][/color] sends 100 waves, [color=#f2d26b][b]Q[/b][/color] upgrades the selected tower once, [color=#f2d26b][b]W[/b][/color] +10 levels, [color=#f2d26b][b]E[/b][/color] +100 levels, [color=#f2d26b][b]Shift+E[/b][/color] spends all gold maxing it, [color=#f2d26b][b]D[/b][/color] deletes the piece under the cursor, [color=#f2d26b][b]F[/b][/color] toggles mass-delete (left-drag removes pieces, [color=#f2d26b][b]Alt[/b][/color] = a whole line), [color=#f2d26b][b]Z[/b][/color] undoes, [color=#f2d26b][b]+/-[/b][/color] adjusts speed, [color=#f2d26b][b]Esc[/b][/color] toggles Options (or closes Help).
 
 """ + _H + "Goal" + _HE + \
 """Build a maze of walls to route enemies toward your towers and defend. Enemies that reach the exit cost lives - the run ends at zero. The game is endless; survive as long as you can. Best wave / score is shown on the game-over screen.
@@ -24,13 +24,13 @@ const HELP_TEXT := _H + "Controls" + _HE + \
 """Buy pieces from the bottom bar. Place a tower on a wall to replace it. Left-click a placed piece to upgrade, right-click to sell. Gold comes from kills. A wave won't start unless enemies have a path out.
 
 """ + _H + "Towers" + _HE + \
-"""Bullet and Sniper fire single shots; Cannon and Missile deal splash damage; Laser burns a continuous single-target beam; Ice is an AOE frost field - every enemy in range is slowed on each pulse (no damage). Two support towers don't attack: Gold Mine raises the gold you earn from kills (+0.5%/level, all of them stack), and Amplifier boosts everything the 8 pieces touching it do - +0.5%/level to damage, slow (capped 95%), damage-over-time and splash (AOE) area, plus an adjacent Gold Mine's rate (place it in the middle of a cluster).
+"""Bullet and Sniper fire single shots; Cannon and Missile deal splash damage; Laser burns a continuous single-target beam; Ice is an AOE frost field - every enemy in range is slowed on each pulse (no damage). Range starts modest and grows every 2 levels up to per-type caps (Bullet/Ice 160, Cannon 180, Laser 200, Missile 220, Sniper 300) - damage and fire rate keep scaling past that, so coverage matters early and DPS late. Two support towers don't attack: Gold Mine raises the gold you earn from kills (+0.5%/level, all of them stack), and Amplifier boosts everything the 8 pieces touching it do - +0.5%/level to damage, slow (capped 95%), damage-over-time and splash (AOE) area, plus an adjacent Gold Mine's rate (place it in the middle of a cluster).
 
 """ + _H + "Traps" + _HE + \
 """Tar slows, Spike damages on contact, Poison and Fire burn over time (Poison also makes enemies take extra damage from everything), Volcano erupts every second and damages every enemy in its area.
 
 """ + _H + "Enemies & Waves" + _HE + \
-"""Runners are fast and resist Poison; Tanks are slow, tough and resist Fire. Each wave rotates a deploy style - Steady, Swarm (fast packs), Heavy (tanks), Squads (same-type bursts) - so no two in a row feel alike; the Next-wave label shows which. Boss waves hit at 5, 15, 25, ... with growing boss counts (1, 2, 3, 5, 7, ...) - a mix of beetles and spiders - trickled in 1-3 at a time alongside that wave's normal enemies. Each boss wave also brings tanky, slow Turtles (1 at wave 5, +1 each boss wave) that get tougher every boss level. Auto sends waves for you. With the 30s round timer on, sending a non-boss wave early grants bonus gold that grows +2% per wave.
+"""Runners are fast and resist Poison; Tanks are slow, tough and resist Fire. Each wave rotates a deploy style - Steady, Swarm (fast packs), Heavy (tanks), Squads (same-type bursts) - so no two in a row feel alike; the Next-wave label shows which. Boss waves hit at 5, 15, 25, ... with growing boss counts (1, 2, 3, 5, 7, ...) - a mix of beetles and spiders - trickled in 1-3 at a time alongside that wave's normal enemies. Each boss wave also brings tanky, slow Turtles (1 at wave 5, +1 each boss wave) that get tougher every boss level. Bosses leaking actually hurts: beetles and spiders cost 5 lives, turtles 8 (normal enemies still cost 1). Auto sends waves for you. With the 30s round timer on, sending a non-boss wave early grants bonus gold that grows +2% per wave.
 
 """ + _H + "Modifiers (Options)" + _HE + \
 """Toggle in Options: Hard mode (no bonus lives, 40% less starting gold), Unlimited lives / money, No-cost walls, 30s round timer with early-send bonus, hold-drag wall building. Settings persist across sessions. Options also has Save / Load (unlimited named saves to disk), Quit (with a save prompt), board-size selection, and lifetime Stats.
@@ -158,10 +158,24 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_Z:
 			_on_undo_pressed()
 		KEY_Q:
-			# Spend all gold maxing out the selected tower/trap.
+			# Upgrade the selected tower/trap once.
 			if level != null:
-				level.max_upgrade_selected()
+				level.upgrade_selected()
+		KEY_W:
+			# Upgrade the selected tower/trap up to 10 levels.
+			if level != null:
+				level.upgrade_selected_n(10)
+		KEY_E:
+			if level != null:
+				if event.shift_pressed:
+					level.max_upgrade_selected()  # Shift+E: pour all gold into it
+				else:
+					level.upgrade_selected_n(100)  # E: +100 levels
 		KEY_D:
+			# Delete the piece currently under the cursor (quick single delete).
+			if level != null:
+				level.delete_hovered()
+		KEY_F:
 			# Toggle mass-delete mode (left-drag removes pieces; Alt = line).
 			if level != null:
 				level.toggle_delete_mode()
@@ -304,6 +318,13 @@ func _build_bar() -> void:
 	var bar := Panel.new()
 	bar.position = Vector2(0, BAR_Y)
 	bar.size = Vector2(1280, 120)
+	# Solid dark backing so the bar reads as a separate UI strip against the
+	# newly brighter board graphics (the default Panel theme was too see-through).
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.06, 0.07, 0.09, 0.98)
+	sb.border_color = Color(0.32, 0.36, 0.46, 0.85)
+	sb.border_width_top = 1
+	bar.add_theme_stylebox_override("panel", sb)
 	add_child(bar)
 
 	_gold_label = _make_label(Vector2(12, 4), 14)

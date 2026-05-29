@@ -1,4 +1,4 @@
-# Simple Tower Defense
+# Simple Tower Defense 2D
 
 An endless, maze-building tower defense game made in **Godot 4.6** (GL Compatibility renderer). Build a labyrinth of walls to route enemies past your towers, mix eight tower types and five traps, and survive as many waves as you can. Everything is drawn with vector primitives — no art assets, just code.
 
@@ -13,7 +13,7 @@ An endless, maze-building tower defense game made in **Godot 4.6** (GL Compatibi
 - **Maps** — Open field, Spiral, or a procedurally **Generated** single-path labyrinth (a fresh layout each game), plus a built-in editor to paint and save your own.
 - **Save / load** — save the **exact mid-game state** (board, economy, *and* live enemies) to **unlimited named save files** at any moment, plus an auto-save each cleared wave with a **Continue** button on the game-over screen.
 - **Difficulty modifiers** — Hard mode (no bonus lives, less gold), unlimited lives/money, free walls, round-timer gold bonus, board size, and more, all persisted between sessions.
-- **Quality of life** — undo, drag-to-place, bulk upgrades (Alt-click ×10 or **Q** to dump all your gold into one tower), **mass-delete mode** (**D**), send the next **10 / 100 waves** (**T** / **Y**), abbreviated big numbers (12.3K / 4.5M), per-tower range/AOE caps so a maxed tower can't blanket the map, lifetime stats, a Quit-with-save option, and high-speed graphics reduction (up to 1000×).
+- **Quality of life** — undo, drag-to-place, bulk upgrades (**Q** +1, **W** +10, **E** +100, **Shift+E** dumps all your gold into one tower), single-piece delete (**D**) and **mass-delete mode** (**F**), send the next **10 / 100 waves** (**T** / **Y**), abbreviated big numbers (12.3K / 4.5M), per-tower range/AOE caps so a maxed tower can't blanket the map, lifetime stats, a Quit-with-save option, and high-speed graphics reduction (up to 1000×).
 
 ![Options & settings](screenshots/options.jpg)
 
@@ -56,8 +56,10 @@ Towers and traps stop growing in *range/AOE* at a cap (so a maxed tower can't co
 | Right-click | Sell a piece |
 | Alt + drag | Place (or remove walls) in a straight line |
 | Alt + left-click | Upgrade a turret 10 levels at once |
-| **Q** | Max out the selected tower (spend all your gold on it) |
-| **D** | Toggle mass-delete (left-drag removes pieces; Alt = a whole line) |
+| **Q** / **W** / **E** | Upgrade the selected tower +1 / +10 / +100 levels |
+| **Shift+E** | Max out the selected tower (spend all your gold on it) |
+| **D** | Delete the piece under the cursor |
+| **F** | Toggle mass-delete (left-drag removes pieces; Alt = a whole line) |
 | **T** / **Y** | Send the next 10 / 100 waves |
 | Alt + Send Wave (or **Alt+Enter**) | Queue the next 10 waves |
 | Mouse wheel | Zoom; middle-drag to pan |
@@ -104,6 +106,13 @@ scripts/
   piece_data.gd        # Static stat tables and scaling formulas
   game_state.gd        # Persistent run state, settings, stats
 ```
+
+## License
+
+Released under the **MIT License** — see [LICENSE](LICENSE). You're free to use, modify, fork, and redistribute the code, including in commercial projects, as long as the original copyright notice and license text are kept.
+
+If you build something on top of this — a fork, a mod, a derivative, even just a video or a write-up — I'd love a heads-up. Drop me a note on GitHub: [@IronWolve](https://github.com/IronWolve). Not required by the license, just a friendly ask so I can see what people are doing with it.
+
 
 ## License
 

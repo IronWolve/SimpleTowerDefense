@@ -159,8 +159,25 @@ func _bulk_upgrade(s: Structure, limit: int) -> void:
 		if s.type == "gold" or s.type == "amplifier":  # gold-enhanced total may change
 			hud._update_wave_info()
 
+## Upgrade the selected tower/trap up to `n` times (bound to W=10, E=100 in the
+## HUD). Stops early at the level cap or when gold runs out.
+func upgrade_selected_n(n: int) -> void:
+	var s := _selected
+	if s == null or not is_instance_valid(s) or not (s is Tower or s is Trap):
+		if hud != null:
+			hud.show_toast("Select a tower or trap first", 2.0)
+		return
+	if not s.can_upgrade():
+		if hud != null:
+			hud.show_toast("%s is already maxed" % s.display_name(), 2.0)
+		return
+	var before := GameState.gold
+	_bulk_upgrade(s, n)
+	if hud != null and not GameState.unlimited_money and before == GameState.gold:
+		hud.show_toast("Not enough gold to upgrade", 2.0)
+
 ## Spend all available gold upgrading the currently-selected tower/trap (bound
-## to Q in the HUD). Stops at the piece's level cap or when gold runs out.
+## to Shift+E in the HUD). Stops at the piece's level cap or when gold runs out.
 func max_upgrade_selected() -> void:
 	var s := _selected
 	if s == null or not is_instance_valid(s) or not (s is Tower or s is Trap):
@@ -1267,7 +1284,18 @@ func sell_selected() -> void:
 	if hud != null:
 		hud.dismiss_popup()
 
-## Toggle mass-delete mode (bound to D). On entry, drop any selection so the
+## Delete the piece under the cursor (bound to D). If a tower/trap is selected,
+## removes that; otherwise removes whatever is in the hovered cell.
+func delete_hovered() -> void:
+	if _selected != null and is_instance_valid(_selected):
+		_remove_structure(_selected)
+		if hud != null:
+			hud.dismiss_popup()
+		return
+	if in_bounds(_hover_cell):
+		_remove_at(_hover_cell)
+
+## Toggle mass-delete mode (bound to F). On entry, drop any selection so the
 ## delete drag has the board to itself; toasts the new state.
 func toggle_delete_mode() -> void:
 	_delete_mode = not _delete_mode
@@ -1276,7 +1304,7 @@ func toggle_delete_mode() -> void:
 		hud.dismiss_popup()
 		_select_structure(null)
 	if hud != null:
-		hud.show_toast("Mass delete: ON  -  Alt+drag = line, D / right-click to exit"
+		hud.show_toast("Mass delete: ON  -  Alt+drag = line, F / right-click to exit"
 			if _delete_mode else "Mass delete: OFF", 2.5)
 	queue_redraw()
 

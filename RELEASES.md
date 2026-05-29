@@ -1,6 +1,6 @@
 # Releases
 
-**Simple Tower Defense** — an endless, maze-building tower defense built in
+**Simple Tower Defense 2D** — an endless, maze-building tower defense built in
 **Godot 4.6**, everything drawn with vector primitives (no art assets). Route
 enemies through your walls and survive as long as you can. Builds ship for
 Windows, Linux, macOS, and Web.
