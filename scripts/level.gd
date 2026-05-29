@@ -340,14 +340,21 @@ func _build_generated_map() -> void:
 	# them, ~85% coverage). Fall back to the full no-block labyrinth, then the
 	# simple serpentine, so a map always appears.
 	var grid: Array = []
+	var from_blocked := false
 	for _a in range(12):  # blocked gen succeeds ~50%/try; retry so blocks appear
 		grid = _generate_blocked()
 		if not grid.is_empty():
+			from_blocked = true
 			break
 	if grid.is_empty():
 		grid = _generate_hamiltonian()
 	if grid.is_empty():
 		grid = _generate_serpentine(randf() < 0.5)
+	# 50% chance to thin the wall mass into scattered L-corner / 2x2 / domino
+	# clusters with open gaps between. Only applied to the blocked generator
+	# because that one tags 3x3 tower-cluster spots we want to preserve.
+	if from_blocked and randf() < 0.5:
+		_thin_to_clusters(grid, 0.45)
 	for r in range(ROWS):
 		for c in range(COLS):
 			if grid[r][c] == 1:
@@ -355,6 +362,86 @@ func _build_generated_map() -> void:
 	# Restore non-deterministic randomness for everything else (waves, sparks,
 	# enemy jitter) - leaving the seed pinned would make the whole run replay.
 	randomize()
+
+## Thin the wall mass in `grid` into scattered clusters (L-corners, 2x2s,
+## dominoes, single dots) with open gaps between - the "ruins" look instead
+## of a continuous corridor wall. The deliberate 3x3 solid blocks from
+## _generate_blocked are detected and preserved untouched, so the path's
+## tower-cluster spots survive. Mutates `grid` in place.
+##
+## Removing walls only frees space; the spawn->base path is in `grid` as
+## empty cells already, so it can't be disconnected by thinning.
+func _thin_to_clusters(grid: Array, keep_pct: float) -> void:
+	# Pass 1: find the centres of fully-solid 3x3 wall squares and mark all 9
+	# of their cells as protected. Those came from _generate_blocked's
+	# deliberate tower-cluster spots.
+	var protect := {}
+	for r in range(1, ROWS - 1):
+		for c in range(1, COLS - 1):
+			if grid[r][c] != 1:
+				continue
+			var solid := true
+			for dr in [-1, 0, 1]:
+				for dc in [-1, 0, 1]:
+					if grid[r + dr][c + dc] != 1:
+						solid = false
+						break
+				if not solid:
+					break
+			if solid:
+				for dr in [-1, 0, 1]:
+					for dc in [-1, 0, 1]:
+						protect[Vector2i(c + dc, r + dr)] = true
+
+	# Snapshot before mutation so the bias uses the original neighborhood,
+	# not the half-thinned one (otherwise the deletion cascade unevenly).
+	var orig: Array = []
+	for r in range(ROWS):
+		orig.append(grid[r].duplicate())
+
+	# Pass 2: biased culling. Keep probability tracks how many orthogonal
+	# neighbors are also walls in the original - dense interiors keep more
+	# than fringe singletons, naturally leaving small clusters.
+	for r in range(ROWS):
+		for c in range(COLS):
+			if orig[r][c] != 1:
+				continue
+			if protect.has(Vector2i(c, r)):
+				continue
+			var n := 0
+			for d in DIRS:
+				var nr := r + d.y
+				var nc := c + d.x
+				if nr >= 0 and nr < ROWS and nc >= 0 and nc < COLS \
+						and orig[nr][nc] == 1:
+					n += 1
+			# 0 neighbors -> 25% keep; 2 -> keep_pct; 4 -> keep_pct + 0.20.
+			var keep := keep_pct + 0.10 * (n - 2)
+			if randf() > keep:
+				grid[r][c] = 0
+
+	# Pass 3: strip leftover salt-and-pepper. Any wall with 0 orthogonal
+	# wall neighbors AFTER pass 2 has a 70% chance of being culled too, so
+	# the survivors are clusters of 2+ cells (L-corners, dominoes, 2x2s)
+	# instead of stray dots.
+	var orig2: Array = []
+	for r in range(ROWS):
+		orig2.append(grid[r].duplicate())
+	for r in range(ROWS):
+		for c in range(COLS):
+			if orig2[r][c] != 1:
+				continue
+			if protect.has(Vector2i(c, r)):
+				continue
+			var n := 0
+			for d in DIRS:
+				var nr := r + d.y
+				var nc := c + d.x
+				if nr >= 0 and nr < ROWS and nc >= 0 and nc < COLS \
+						and orig2[nr][nc] == 1:
+					n += 1
+			if n == 0 and randf() < 0.7:
+				grid[r][c] = 0
 
 ## Lattice <-> cell helpers (node index = j * NX + i).
 func _hcell(n: int) -> Vector2i:

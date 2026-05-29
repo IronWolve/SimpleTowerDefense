@@ -22,6 +22,28 @@ host), not opened straight from disk.
 
 ---
 
+## v51 — Cluster-style generated maps + health-bar polish
+
+**Generated maps: ruins-style variant**
+Half of the Generated maps you roll now come back with the wall mass thinned
+into scattered **L-corner / 2×2 / domino** clusters with open gaps between,
+instead of a continuous corridor wall. The path still runs the same way and
+the deliberate 3×3 tower-cluster spots are preserved untouched — the rest of
+the wall mass gets eroded to give an "abandoned base" / "ruins" feel.
+
+Each Generated layout is rolled fresh from the persisted seed, so a "Same
+map" New Game will replay the exact same thinning pattern.
+
+**Health bar**
+- **Moved above the body.** The bar used to sit at the enemy's middle,
+  competing with the v50 vehicle bodies' turrets and canopies; it's now a
+  small bar 8 px above the silhouette so the body draws clean underneath.
+- **Wider** (min 32 px, scaling up with radius). Big bosses get ~58 px of
+  bar so small hits are actually resolvable.
+- **Damage flash.** Any hit shows the slice you just lost as a yellow chunk
+  to the right of the green for a fraction of a second before catching back
+  up. Even subpixel hits at late waves are now visible.
+
 ## v50 — Robot/vehicle enemy redesign
 
 Every enemy in the game has been redrawn as a top-down robot or vehicle, and
