@@ -31,7 +31,5 @@ Move items here freely. Promote into a release when done.
 ---
 
 ## Done since last release
-- New Game (Options) with Generated map now asks "Same map / New map / Cancel"
-  instead of silently rolling fresh. Game-over Restart always replays the same
-  generated map. Seed persisted in settings (`generated_seed`).
+_(shipped in v49 / v50; move new items here as they land before the next release)_
 

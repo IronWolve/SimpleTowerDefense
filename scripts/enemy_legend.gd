@@ -45,30 +45,80 @@ func _text(font: Font, fs: int, x: float, cy: float, s: String, col: Color) -> f
 	draw_string(font, Vector2(x, cy + fs * 0.36), s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 	return x + font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 
+## Top-down icons matching the in-game enemy redesign (forward = right).
+## Each fits in a 14x14 box (radius 7) with thin outlines so they read at
+## HUD scale.
 func _draw_icon(c: Vector2, shape: String, col: Color) -> void:
 	var r := 7.0
+	var outline := Color(0, 0, 0, 0.85)
+	var dark := col.darkened(0.45)
 	match shape:
 		"triangle":
-			draw_colored_polygon(_ngon(c, 3, -PI / 2.0, r * 1.15), col)
+			# Runner: wedge body pointing right, two side wheels.
+			var pts := _runner_pts(c, r)
+			draw_colored_polygon(pts, col)
+			draw_polyline(_close_loop(pts), outline, 1.0)
+			for sy in [-r * 0.50, r * 0.50]:
+				draw_rect(Rect2(c.x - r * 0.20, c.y + sy - r * 0.10, r * 0.40, r * 0.20),
+					Color(0.18, 0.18, 0.22))
 		"hexagon":
-			draw_colored_polygon(_ngon(c, 6, PI / 6.0, r), col)
+			# Tank: hull between two treads, small turret + forward barrel.
+			draw_rect(Rect2(c.x - r * 0.85, c.y - r * 0.90, r * 1.70, r * 0.22), outline)
+			draw_rect(Rect2(c.x - r * 0.85, c.y + r * 0.68, r * 1.70, r * 0.22), outline)
+			draw_rect(Rect2(c.x - r * 0.80, c.y - r * 0.60, r * 1.60, r * 1.20), outline)
+			draw_rect(Rect2(c.x - r * 0.72, c.y - r * 0.52, r * 1.44, r * 1.04), col)
+			draw_circle(c, r * 0.36, outline)
+			draw_circle(c, r * 0.28, col.lightened(0.10))
+			draw_rect(Rect2(c.x + r * 0.20, c.y - r * 0.10, r * 0.85, r * 0.20), outline)
+			draw_rect(Rect2(c.x + r * 0.24, c.y - r * 0.06, r * 0.78, r * 0.12), dark)
 		"beetle":
-			draw_circle(c + Vector2(0, -r * 0.78), r * 0.42, col.darkened(0.4))
-			draw_colored_polygon(_oval(c, r * 0.8, r * 1.0, 16), col)
-			draw_line(c + Vector2(0, -r * 0.5), c + Vector2(0, r * 0.9),
-				col.darkened(0.4), 1.6)
+			# Beetle walker: oval carapace, 4 leg-bumps, two front optics.
+			for sx in [-1.0, 1.0]:
+				for sy in [-1.0, 1.0]:
+					draw_line(c + Vector2(sx * r * 0.30, sy * r * 0.30),
+						c + Vector2(sx * r * 0.85, sy * r * 0.85), outline, 2.0)
+			var car := _oval(c, r * 0.78, r * 0.66, 18)
+			draw_colored_polygon(car, col)
+			draw_polyline(_close_loop(car), outline, 1.0)
+			for sy in [-r * 0.28, r * 0.28]:
+				draw_circle(c + Vector2(r * 0.46, sy), r * 0.14, Color(1, 0.91, 0.55))
 		"turtle":
-			var dk := col.darkened(0.4)
-			# Head + four little flippers, then the domed shell.
-			draw_circle(c + Vector2(0, -r * 0.85), r * 0.24, dk)
-			for s in [-1.0, 1.0]:
-				for fy in [-0.5, 0.5]:
-					draw_circle(c + Vector2(s * r * 0.7, fy * r), r * 0.2, dk)
-			draw_circle(c, r * 0.72, col)
-			draw_circle(c, r * 0.28, col.lightened(0.25))
-			draw_arc(c, r * 0.72, 0.0, TAU, 16, dk, 1.4)
+			# Turtle siege transport: side treads + big domed shell + slit.
+			draw_rect(Rect2(c.x - r * 0.95, c.y - r * 0.85, r * 1.90, r * 0.22), outline)
+			draw_rect(Rect2(c.x - r * 0.95, c.y + r * 0.62, r * 1.90, r * 0.22), outline)
+			var shell := _oval(c, r * 0.85, r * 0.62, 22)
+			draw_colored_polygon(shell, col)
+			draw_polyline(_close_loop(shell), outline, 1.0)
+			draw_circle(c + Vector2(-r * 0.20, -r * 0.18), r * 0.42, Color(1, 1, 1, 0.22))
+			draw_rect(Rect2(c.x + r * 0.52, c.y - r * 0.20, r * 0.10, r * 0.40),
+				Color(1, 0.91, 0.55, 0.85))
 		_:
-			draw_circle(c, r, col)
+			# Grunt scout: small boxy hull with 4 corner wheels + dome.
+			for sx in [-r * 0.55, r * 0.30]:
+				for sy in [-r * 0.55, r * 0.42]:
+					draw_rect(Rect2(c.x + sx, c.y + sy, r * 0.30, r * 0.16),
+						Color(0.18, 0.18, 0.22))
+			draw_rect(Rect2(c.x - r * 0.80, c.y - r * 0.50, r * 1.60, r * 1.00), outline)
+			draw_rect(Rect2(c.x - r * 0.72, c.y - r * 0.42, r * 1.44, r * 0.84), col)
+			draw_circle(c + Vector2(-r * 0.06, 0), r * 0.30, dark)
+			draw_circle(c + Vector2(r * 0.65, 0), r * 0.14, Color(1, 0.91, 0.55))
+
+## Runner wedge polygon: blunt back, pointed nose (right). Used by the legend.
+func _runner_pts(c: Vector2, r: float) -> PackedVector2Array:
+	return PackedVector2Array([
+		c + Vector2(-r * 0.90, -r * 0.42),
+		c + Vector2(r * 0.20, -r * 0.42),
+		c + Vector2(r * 1.00, 0.0),
+		c + Vector2(r * 0.20, r * 0.42),
+		c + Vector2(-r * 0.90, r * 0.42),
+	])
+
+## Closes a polygon by appending its first point. Used so polylines draw a
+## complete outline.
+func _close_loop(pts: PackedVector2Array) -> PackedVector2Array:
+	var out := pts.duplicate()
+	out.append(pts[0])
+	return out
 
 func _ngon(c: Vector2, sides: int, rot: float, r: float) -> PackedVector2Array:
 	var pts := PackedVector2Array()

@@ -19,8 +19,9 @@ var is_boss := false
 var shape := "circle"
 ## Which boss silhouette to draw when is_boss is true: "beetle", "spider" or "turtle".
 var boss_kind := "beetle"
-## Rotation applied to the boss silhouette so its head points the way it moves
-## (silhouettes are drawn head-up, so this is movement-angle + PI/2). 0 = up.
+## Rotation applied to the whole body so it faces its travel direction.
+## All enemy bodies are drawn forward = +X (right), so this is just the
+## heading angle; Godot's draw_set_transform handles the rotation.
 var _face := 0.0
 
 var _path: Array[Vector2i] = []
@@ -94,11 +95,12 @@ func _process(delta: float) -> void:
 	if _path.is_empty():
 		_reach_base()
 		return
-	# Face the current heading (used to rotate boss silhouettes).
+	# Face the current heading. Bodies are drawn forward = +X, so the angle is
+	# just heading.angle() (no +PI/2 offset). Used for every enemy now.
 	if not _path.is_empty():
 		var heading := _level.cell_center(_path[0]) - position
 		if heading.length_squared() > 0.01:
-			_face = heading.angle() + PI / 2.0
+			_face = heading.angle()
 	# Advance through as many cells as elapsed time allows (high-speed catch-up).
 	var step := speed * delta
 	var guard := 0
@@ -249,35 +251,236 @@ func _draw() -> void:
 	draw_rect(Rect2(-radius, bar_y, radius * 2.0, 4.0), Color(0, 0, 0, 0.65))
 	draw_rect(Rect2(-radius, bar_y, radius * 2.0 * frac, 4.0), Color(0.30, 0.90, 0.35))
 
-## A distinct silhouette per archetype so types are told apart at a glance.
+## Top-down robot/vehicle bodies. All draw forward = +X, so the whole body
+## rotates with _face. After drawing, the transform is reset so the health
+## bar and status pips stay world-axis-aligned.
 func _draw_body() -> void:
+	draw_set_transform(Vector2.ZERO, _face, Vector2.ONE)
 	if is_boss:
-		# Rotate just the boss silhouette to face its heading, then restore the
-		# default transform so the health bar and status icons stay upright.
-		draw_set_transform(Vector2.ZERO, _face, Vector2.ONE)
 		match boss_kind:
-			"spider": _draw_spider()
-			"turtle": _draw_turtle()
-			_: _draw_beetle()
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		return
-	# Non-boss: body shape + opaque outline + a small upper-left lit highlight
-	# that fakes a top-light "molded" feel.
-	var lit := color.lightened(0.30)
-	var hl_off := Vector2(-radius * 0.25, -radius * 0.35)
-	var hl_r := radius * 0.32
-	if shape == "triangle":
-		var tri := _ngon(3, -PI / 2.0, radius * 1.18)
-		draw_colored_polygon(tri, color)
-		_draw_outline(tri, OUTLINE)
-	elif shape == "hexagon":
-		var hex := _ngon(6, PI / 6.0, radius)
-		draw_colored_polygon(hex, color)
-		_draw_outline(hex, OUTLINE)
+			"spider": _draw_spider_drone()
+			"turtle": _draw_turtle_transport()
+			_: _draw_beetle_walker()
 	else:
-		draw_circle(Vector2.ZERO, radius, color)
-		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 24, OUTLINE, 2.0)
-	draw_circle(hl_off, hl_r, Color(lit.r, lit.g, lit.b, 0.45))
+		match shape:
+			"triangle": _draw_runner_car()
+			"hexagon": _draw_tank()
+			_: _draw_grunt_scout()
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+## --- Top-down vehicle/mech draws. Forward = +X (right). Sizes scale with
+## radius so balance tweaks to enemy size don't break the visuals. ---
+
+## Grunt: armored 4-wheel scout buggy. Boxy hull, dome canopy, paired
+## headlights up front. Reads as a patrol vehicle.
+func _draw_grunt_scout() -> void:
+	var r := radius
+	var dark := color.darkened(0.50)
+	# Four corner wheels (rectangles oriented along the body axis).
+	for sx in [-r * 0.50, r * 0.30]:
+		for sy in [-r * 0.40, r * 0.40]:
+			draw_rect(Rect2(sx, sy - r * 0.14, r * 0.20, r * 0.14), OUTLINE)
+			draw_rect(Rect2(sx + r * 0.02, sy - r * 0.10, r * 0.16, r * 0.10),
+				Color(0.22, 0.22, 0.24))
+	# Hull outline + body.
+	var bw := r * 1.10
+	var bh := r * 0.66
+	draw_rect(Rect2(-bw, -bh, bw * 2.0, bh * 2.0), OUTLINE)
+	draw_rect(Rect2(-bw + 2.0, -bh + 2.0, bw * 2.0 - 4.0, bh * 2.0 - 4.0), color)
+	# Top-lit strip (left/front-quarter where overhead light hits).
+	draw_rect(Rect2(-bw + 2.0, -bh + 2.0, bw * 2.0 - 4.0, 3.0),
+		Color(1, 1, 1, 0.18))
+	# Round canopy dome with a glass highlight.
+	draw_circle(Vector2(-r * 0.05, 0), r * 0.32, OUTLINE)
+	draw_circle(Vector2(-r * 0.05, 0), r * 0.27, dark)
+	draw_circle(Vector2(-r * 0.14, -r * 0.10), r * 0.16,
+		Color(0.78, 0.82, 0.92, 0.55))
+	# Paired forward headlights (right edge).
+	draw_circle(Vector2(bw - 2.0, -r * 0.28), r * 0.10, Color(1, 0.92, 0.55))
+	draw_circle(Vector2(bw - 2.0, r * 0.28), r * 0.10, Color(1, 0.92, 0.55))
+
+## Runner: long sleek race car / speeder, tapered nose, motion lines behind.
+## Reads as "fast." Resists poison (sealed cockpit, no biology).
+func _draw_runner_car() -> void:
+	var r := radius
+	var dark := color.darkened(0.45)
+	# Trailing motion lines (in body color, behind the rear axle).
+	for off in [Vector2(-r * 2.0, 0.0), Vector2(-r * 1.8, -r * 0.40), Vector2(-r * 1.8, r * 0.40)]:
+		draw_rect(Rect2(off.x, off.y - r * 0.06, r * 0.55, r * 0.12),
+			Color(color.r, color.g, color.b, 0.45))
+	# Side wheels (4 small ones).
+	for sx in [-r * 0.65, r * 0.20]:
+		for sy in [-r * 0.55, r * 0.45]:
+			draw_rect(Rect2(sx, sy, r * 0.32, r * 0.16), OUTLINE)
+			draw_rect(Rect2(sx + 0.04, sy + 0.04, r * 0.28, r * 0.12),
+				Color(0.22, 0.22, 0.24))
+	# Body: tapered wedge from blunt back to pointed nose at +X.
+	var pts := PackedVector2Array([
+		Vector2(-r * 0.95, -r * 0.42),
+		Vector2(r * 0.30, -r * 0.42),
+		Vector2(r * 1.20, 0.0),
+		Vector2(r * 0.30, r * 0.42),
+		Vector2(-r * 0.95, r * 0.42),
+	])
+	_draw_filled_outlined(pts, color, OUTLINE)
+	# Top-lit strip along the upper half of the wedge.
+	var lit_pts := PackedVector2Array([
+		Vector2(-r * 0.90, -r * 0.40), Vector2(r * 0.28, -r * 0.40),
+		Vector2(r * 1.05, -r * 0.10), Vector2(-r * 0.90, -r * 0.20),
+	])
+	draw_colored_polygon(lit_pts, Color(1, 1, 1, 0.22))
+	# Cockpit canopy: small oval in the middle.
+	draw_circle(Vector2(-r * 0.12, 0), r * 0.30, OUTLINE)
+	draw_circle(Vector2(-r * 0.12, 0), r * 0.24,
+		Color(0.78, 0.82, 0.92, 0.65))
+	# Rear spoiler bar (back end).
+	draw_rect(Rect2(-r * 1.05, -r * 0.50, r * 0.12, r * 1.00), OUTLINE)
+	draw_rect(Rect2(-r * 1.02, -r * 0.42, r * 0.06, r * 0.84), dark)
+	# Forward nose lamp.
+	draw_circle(Vector2(r * 1.08, 0), r * 0.10, Color(1, 0.92, 0.55))
+
+## Tank: chunky armored hull between two side treads, central turret, gun
+## barrel pointing forward. Reads as "slow & tough." Resists fire.
+func _draw_tank() -> void:
+	var r := radius
+	var dark := color.darkened(0.45)
+	# Top tread strip (with tick marks).
+	var tw := r * 1.10  # tread half-length
+	var ty := r * 0.78  # tread distance from centerline
+	draw_rect(Rect2(-tw, -ty - r * 0.18, tw * 2.0, r * 0.18 * 2.0), OUTLINE)
+	# Tread tick marks: ~6 short rectangles along the tread.
+	var th := r * 0.18 * 1.5
+	var tickw := r * 0.14
+	for i in range(7):
+		var tx := -tw + r * 0.06 + i * (tw * 2.0 - r * 0.12) / 7.0
+		draw_rect(Rect2(tx, -ty - r * 0.14, tickw, th),
+			Color(0.30, 0.30, 0.34))
+	# Bottom tread strip.
+	draw_rect(Rect2(-tw, ty - r * 0.18, tw * 2.0, r * 0.18 * 2.0), OUTLINE)
+	for i in range(7):
+		var tx2 := -tw + r * 0.06 + i * (tw * 2.0 - r * 0.12) / 7.0
+		draw_rect(Rect2(tx2, ty - r * 0.14, tickw, th),
+			Color(0.30, 0.30, 0.34))
+	# Hull between the treads.
+	var hw := r * 1.00
+	var hh := r * 0.58
+	draw_rect(Rect2(-hw, -hh, hw * 2.0, hh * 2.0), OUTLINE)
+	draw_rect(Rect2(-hw + 2.0, -hh + 2.0, hw * 2.0 - 4.0, hh * 2.0 - 4.0), color)
+	# Top-lit strip across the hull's upper edge.
+	draw_rect(Rect2(-hw + 2.0, -hh + 2.0, hw * 2.0 - 4.0, 3.0),
+		Color(1, 1, 1, 0.20))
+	# Turret: round, centred.
+	draw_circle(Vector2(-r * 0.05, 0), r * 0.46, OUTLINE)
+	draw_circle(Vector2(-r * 0.05, 0), r * 0.40, color.lightened(0.08))
+	# Turret top highlight + central hatch.
+	draw_circle(Vector2(-r * 0.18, -r * 0.14), r * 0.22, Color(1, 1, 1, 0.22))
+	draw_circle(Vector2(-r * 0.05, 0), r * 0.10, Color(0, 0, 0, 0.55))
+	# Gun barrel pointing forward (+X).
+	draw_rect(Rect2(r * 0.30, -r * 0.10, r * 1.10, r * 0.20), OUTLINE)
+	draw_rect(Rect2(r * 0.34, -r * 0.06, r * 1.02, r * 0.12), dark)
+	# Muzzle cap.
+	draw_rect(Rect2(r * 1.30, -r * 0.16, r * 0.14, r * 0.32), OUTLINE)
+
+## Beetle boss: quadrupedal walker mech. Oval armored carapace, four splayed
+## legs with foot pads, two glowing optics up front. Blue (BEETLE_COLOR).
+func _draw_beetle_walker() -> void:
+	var r := radius
+	# Four legs splayed NW/NE/SW/SE - drawn before the body so the carapace
+	# covers the leg roots.
+	for sx in [-1.0, 1.0]:
+		for sy in [-1.0, 1.0]:
+			var root := Vector2(sx * r * 0.40, sy * r * 0.40)
+			var foot := Vector2(sx * r * 1.05, sy * r * 1.05)
+			draw_line(root, foot, OUTLINE, 6.0)
+			draw_line(root, foot, color.darkened(0.45), 3.5)
+			draw_circle(foot, r * 0.10, OUTLINE)
+	# Carapace: oval, longer along travel axis (+X).
+	var car := _ellipse(r * 0.95, r * 0.78, 24)
+	_draw_filled_outlined(car, color, OUTLINE)
+	# Top-lit highlight on the upper-back of the carapace.
+	draw_circle(Vector2(-r * 0.25, -r * 0.25), r * 0.36, Color(1, 1, 1, 0.24))
+	# Centre seam ridge running along the body axis.
+	draw_line(Vector2(-r * 0.80, 0), Vector2(r * 0.80, 0),
+		Color(0, 0, 0, 0.45), 1.5)
+	# Two glowing front optics on the right (front) edge.
+	for sy in [-r * 0.28, r * 0.28]:
+		draw_circle(Vector2(r * 0.55, sy), r * 0.14, OUTLINE)
+		draw_circle(Vector2(r * 0.55, sy), r * 0.09, Color(1, 0.91, 0.55))
+
+## Spider boss: 8-legged combat drone splayed in classic spider pattern.
+## Single big red cyclops optic up front.
+func _draw_spider_drone() -> void:
+	var r := radius
+	var dark := color.darkened(0.45)
+	# 8 legs in spider splay (4 per side, knee bends outward). Draw first.
+	var leg_data: Array = [
+		[Vector2(-r * 0.30, -r * 0.40), Vector2(-r * 0.80, -r * 0.75), Vector2(-r * 1.10, -r * 1.05)],
+		[Vector2(-r * 0.45, -r * 0.25), Vector2(-r * 1.05, -r * 0.40), Vector2(-r * 1.30, -r * 0.55)],
+		[Vector2(-r * 0.45, r * 0.25), Vector2(-r * 1.05, r * 0.40), Vector2(-r * 1.30, r * 0.55)],
+		[Vector2(-r * 0.30, r * 0.40), Vector2(-r * 0.80, r * 0.75), Vector2(-r * 1.10, r * 1.05)],
+		[Vector2(r * 0.30, -r * 0.40), Vector2(r * 0.80, -r * 0.75), Vector2(r * 1.10, -r * 1.05)],
+		[Vector2(r * 0.45, -r * 0.25), Vector2(r * 1.05, -r * 0.40), Vector2(r * 1.30, -r * 0.55)],
+		[Vector2(r * 0.45, r * 0.25), Vector2(r * 1.05, r * 0.40), Vector2(r * 1.30, r * 0.55)],
+		[Vector2(r * 0.30, r * 0.40), Vector2(r * 0.80, r * 0.75), Vector2(r * 1.10, r * 1.05)],
+	]
+	for leg in leg_data:
+		draw_polyline(PackedVector2Array(leg), OUTLINE, 4.0)
+		draw_polyline(PackedVector2Array(leg), dark, 2.2)
+	# Central body: oval, slightly longer along travel.
+	var body := _ellipse(r * 0.52, r * 0.42, 22)
+	_draw_filled_outlined(body, color, OUTLINE)
+	# Top-lit highlight.
+	draw_circle(Vector2(-r * 0.12, -r * 0.12), r * 0.22, Color(1, 1, 1, 0.24))
+	# Big red front cyclops optic.
+	draw_circle(Vector2(r * 0.30, 0), r * 0.16, OUTLINE)
+	draw_circle(Vector2(r * 0.30, 0), r * 0.11, Color(1, 0.35, 0.22))
+	draw_circle(Vector2(r * 0.30, 0), r * 0.05, Color(1, 0.82, 0.74))
+	# Rear chassis vent slits.
+	draw_rect(Rect2(-r * 0.36, -r * 0.06, r * 0.20, r * 0.04),
+		Color(0, 0, 0, 0.65))
+	draw_rect(Rect2(-r * 0.36, r * 0.02, r * 0.20, r * 0.04),
+		Color(0, 0, 0, 0.65))
+
+## Turtle boss: heavy low siege transport. Wide tread strips both sides,
+## big domed armored shell, slit windows up front.
+func _draw_turtle_transport() -> void:
+	var r := radius
+	# Tread strips top and bottom (matching the tank style but wider).
+	var tw := r * 1.08
+	var ty := r * 0.82
+	draw_rect(Rect2(-tw, -ty - r * 0.20, tw * 2.0, r * 0.40), OUTLINE)
+	for i in range(8):
+		var tx := -tw + r * 0.06 + i * (tw * 2.0 - r * 0.12) / 8.0
+		draw_rect(Rect2(tx, -ty - r * 0.15, r * 0.12, r * 0.30),
+			Color(0.30, 0.30, 0.34))
+	draw_rect(Rect2(-tw, ty - r * 0.20, tw * 2.0, r * 0.40), OUTLINE)
+	for i in range(8):
+		var tx2 := -tw + r * 0.06 + i * (tw * 2.0 - r * 0.12) / 8.0
+		draw_rect(Rect2(tx2, ty - r * 0.15, r * 0.12, r * 0.30),
+			Color(0.30, 0.30, 0.34))
+	# Domed armored shell: big oval.
+	var shell := _ellipse(r * 0.92, r * 0.68, 28)
+	_draw_filled_outlined(shell, color, OUTLINE)
+	# Top-lit highlight on upper-back of shell.
+	draw_circle(Vector2(-r * 0.22, -r * 0.22), r * 0.50, Color(1, 1, 1, 0.22))
+	# Shell panel seams radiating from centre.
+	draw_arc(Vector2(0, -r * 0.20), r * 0.60, PI * 0.20, PI * 0.80,
+		16, Color(0, 0, 0, 0.40), 1.3)
+	draw_arc(Vector2(0, r * 0.20), r * 0.60, PI * 1.20, PI * 1.80,
+		16, Color(0, 0, 0, 0.40), 1.3)
+	draw_line(Vector2(-r * 0.55, 0), Vector2(r * 0.55, 0),
+		Color(0, 0, 0, 0.30), 1.2)
+	# Slit windows on the front (right) edge.
+	for sy in [-r * 0.20, r * 0.20]:
+		draw_rect(Rect2(r * 0.55, sy - r * 0.18, r * 0.06, r * 0.12),
+			Color(1, 0.91, 0.55, 0.85))
+		draw_rect(Rect2(r * 0.65, sy - r * 0.18, r * 0.06, r * 0.12),
+			Color(1, 0.91, 0.55, 0.85))
+
+## Helper: draw a closed polygon filled and outlined with the given colors.
+func _draw_filled_outlined(pts: PackedVector2Array, fill: Color, line: Color) -> void:
+	draw_colored_polygon(pts, fill)
+	_draw_outline(pts, line)
 
 func _ngon(sides: int, rot: float, r: float) -> PackedVector2Array:
 	var pts := PackedVector2Array()
@@ -298,77 +501,6 @@ func _ellipse(rx: float, ry: float, segments: int) -> PackedVector2Array:
 		pts.append(Vector2(cos(a) * rx, sin(a) * ry))
 	return pts
 
-## A top-down beetle silhouette for boss enemies (head points up).
-func _draw_beetle() -> void:
-	var r := radius
-	var dark := color.darkened(0.45)
-	var outline := Color(0, 0, 0, 0.55)
-	# Six legs - drawn first so the shell covers their roots.
-	for side in [-1.0, 1.0]:
-		for i in range(3):
-			var ly := -r * 0.35 + i * r * 0.4
-			draw_line(Vector2(side * r * 0.45, ly),
-				Vector2(side * r * 1.02, ly + (i - 1) * r * 0.26), dark, 3.0)
-	# Head and pincers at the front.
-	draw_circle(Vector2(0, -r * 0.85), r * 0.32, dark)
-	for side in [-1.0, 1.0]:
-		draw_line(Vector2(side * r * 0.16, -r * 0.95),
-			Vector2(side * r * 0.46, -r * 1.18), dark, 3.0)
-	# Domed shell with a wing seam and markings.
-	var body := _ellipse(r * 0.82, r * 0.98, 22)
-	draw_colored_polygon(body, color)
-	_draw_outline(body, outline)
-	draw_line(Vector2(0, -r * 0.5), Vector2(0, r * 0.9), dark, 2.0)
-	draw_circle(Vector2(-r * 0.36, -r * 0.05), r * 0.15, dark)
-	draw_circle(Vector2(r * 0.36, -r * 0.05), r * 0.15, dark)
-
-## A top-down spider: round abdomen, smaller head, eight angled legs.
-func _draw_spider() -> void:
-	var r := radius
-	var dark := color.darkened(0.45)
-	var outline := Color(0, 0, 0, 0.55)
-	# Eight legs - four per side, each a two-segment bent line.
-	for side in [-1.0, 1.0]:
-		for i in range(4):
-			var ly := -r * 0.5 + i * r * 0.34
-			var knee := Vector2(side * r * 0.85, ly - r * 0.28)
-			draw_line(Vector2(side * r * 0.3, ly), knee, dark, 2.6)
-			draw_line(knee, Vector2(side * r * 1.18, ly + r * 0.12), dark, 2.6)
-	# Abdomen (rear) and cephalothorax (front).
-	var abdomen := _ellipse(r * 0.62, r * 0.72, 20)
-	for i in range(abdomen.size()):
-		abdomen[i] += Vector2(0, r * 0.28)
-	draw_colored_polygon(abdomen, color)
-	_draw_outline(abdomen, outline)
-	draw_circle(Vector2(0, -r * 0.5), r * 0.4, color)
-	draw_arc(Vector2(0, -r * 0.5), r * 0.4, 0.0, TAU, 16, outline, 1.6)
-	# Two eye dots on the head.
-	draw_circle(Vector2(-r * 0.14, -r * 0.6), r * 0.08, dark)
-	draw_circle(Vector2(r * 0.14, -r * 0.6), r * 0.08, dark)
-
-## A top-down turtle: round domed shell with plates, a head, four stubby legs
-## and a little tail. Reads as "slow & armored".
-func _draw_turtle() -> void:
-	var r := radius
-	var dark := color.darkened(0.45)
-	var light := color.lightened(0.2)
-	var outline := Color(0, 0, 0, 0.55)
-	# Head (front), tail (back) and four flippers poking out from under shell.
-	draw_circle(Vector2(0, -r * 0.95), r * 0.26, dark)
-	draw_circle(Vector2(0, r * 0.95), r * 0.16, dark)
-	for s in [-1.0, 1.0]:
-		for fy in [-0.55, 0.55]:
-			draw_circle(Vector2(s * r * 0.82, fy * r), r * 0.2, dark)
-	# Domed shell.
-	draw_circle(Vector2.ZERO, r * 0.82, color)
-	draw_arc(Vector2.ZERO, r * 0.82, 0.0, TAU, 32, outline, 2.0)
-	# Central plate plus a ring of scutes.
-	draw_circle(Vector2.ZERO, r * 0.3, light)
-	draw_arc(Vector2.ZERO, r * 0.3, 0.0, TAU, 16, dark, 1.6)
-	for i in range(6):
-		var a := TAU * i / 6.0
-		var c := Vector2(cos(a), sin(a)) * r * 0.55
-		draw_arc(c, r * 0.18, 0.0, TAU, 10, dark, 1.4)
 
 ## A row of small badges just under the enemy, one per active status effect
 ## (ice / poison / fire / vuln) so the player can see at a glance.

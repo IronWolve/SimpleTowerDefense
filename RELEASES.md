@@ -22,6 +22,44 @@ host), not opened straight from disk.
 
 ---
 
+## v50 — Robot/vehicle enemy redesign
+
+Every enemy in the game has been redrawn as a top-down robot or vehicle, and
+they finally **turn to face the direction they're moving** — a small omission
+the older shapes hid that the new ones make obvious. Same gameplay, same
+stats, same archetypes; just a real visual identity for the roster.
+
+**Regular enemies**
+- **Grunt** is now an **armored scout buggy**: boxy hull, four corner wheels,
+  domed canopy, paired forward headlights.
+- **Runner** is a **race car / speeder**: tapered wedge, side wheels, cockpit
+  canopy, rear spoiler, and motion lines trailing behind to sell its speed.
+- **Tank** is a **battle tank**: hull between two tread strips, central
+  turret with a closed hatch, gun barrel pointing forward.
+
+**Bosses**
+- **Beetle** is now a **quadruped walker mech**: oval armored carapace, four
+  splayed legs with foot pads, two glowing front optics. Blue.
+- **Spider** is a **spider drone**: eight legs in classic spider splay (the
+  silhouette finally reads as a spider, not a diamond), single big red front
+  cyclops, chassis vent slits. Red.
+- **Turtle** is a **heavy siege transport**: huge domed shell, wide tread
+  strips top and bottom, four glowing slit windows on the front edge. Green.
+
+**Direction-facing**
+- Every enemy now rotates to point along its travel direction. The whole
+  body rotates; the health bar and status pips stay world-axis-aligned above
+  it, so a Tank rounding a corner has the barrel always leading the way.
+
+**Under the hood**
+- Bodies are drawn forward = +X with a single transform; `_face` is now just
+  `heading.angle()` instead of the old `+PI/2` boss-only offset.
+- Each draw is parameterized by `radius`, so a future balance tweak to enemy
+  size won't break the visuals.
+- The HUD's enemy legend was redrawn to match — miniature top-down icons
+  facing right, so what you see at the bottom of the screen previews the
+  next wave's silhouettes.
+
 ## v49 — 2D rename, hotkey overhaul, economy & balance pass
 
 Renamed to **Simple Tower Defense 2D**, a chunky hotkey overhaul (the upgrade
