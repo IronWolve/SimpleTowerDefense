@@ -688,25 +688,28 @@ func _build_help() -> void:
 	_help_root.visible = false
 	add_child(_help_root)
 
-	var panel := _make_panel(Vector2(230, 64), Vector2(820, 592))
+	# Shrunk to ~50% of the previous footprint (was 820x592 covering most of
+	# the screen). Panel is recentered on the 1280x720 viewport; fonts stay
+	# the same and the RichTextLabel scrolls when the content overflows.
+	var panel := _make_panel(Vector2(350, 150), Vector2(580, 420))
 	_help_root.add_child(panel)
 
 	var title := Label.new()
 	title.text = "How to Play"
-	title.position = Vector2(32, 16)
-	title.add_theme_font_size_override("font_size", 28)
+	title.position = Vector2(24, 12)
+	title.add_theme_font_size_override("font_size", 22)
 	panel.add_child(title)
 
 	var body := RichTextLabel.new()
 	body.bbcode_enabled = true
 	# HELP_TEXT stores "->"; swap to the platform arrow (real "→" on desktop).
 	body.text = HELP_TEXT.replace("->", _arrow())
-	body.position = Vector2(32, 56)
-	body.size = Vector2(756, 456)
-	body.add_theme_font_size_override("normal_font_size", 14)
+	body.position = Vector2(24, 46)
+	body.size = Vector2(532, 308)
+	body.add_theme_font_size_override("normal_font_size", 13)
 	panel.add_child(body)
 
-	var close := _make_button("Close", Vector2(335, 524), Vector2(150, 46), 18)
+	var close := _make_button("Close", Vector2(240, 364), Vector2(100, 40), 16)
 	close.pressed.connect(_on_help_pressed)
 	panel.add_child(close)
 
