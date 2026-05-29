@@ -326,6 +326,16 @@ var _ham_base_row := 0
 var _ham_blocked := {}  # lattice nodes that are solid tower-blocks (path avoids)
 
 func _build_generated_map() -> void:
+	# Seed the global RNG so the generated layout is reproducible (a "Same map"
+	# New Game replays the same seed; "New map" first clears generated_seed to
+	# 0, which rolls a fresh one here). The seed is persisted in settings.
+	if GameState.generated_seed == 0:
+		randomize()
+		GameState.generated_seed = randi()
+		if GameState.generated_seed == 0:  # 0 means "unset" - reroll if we hit it
+			GameState.generated_seed = 1
+		GameState.save_settings()
+	seed(GameState.generated_seed)
 	# Prefer a labyrinth with a few solid 3x3 tower-blocks (path winds around
 	# them, ~85% coverage). Fall back to the full no-block labyrinth, then the
 	# simple serpentine, so a map always appears.
@@ -342,6 +352,9 @@ func _build_generated_map() -> void:
 		for c in range(COLS):
 			if grid[r][c] == 1:
 				_place_map_wall(Vector2i(c, r))
+	# Restore non-deterministic randomness for everything else (waves, sparks,
+	# enemy jitter) - leaving the seed pinned would make the whole run replay.
+	randomize()
 
 ## Lattice <-> cell helpers (node index = j * NX + i).
 func _hcell(n: int) -> Vector2i:

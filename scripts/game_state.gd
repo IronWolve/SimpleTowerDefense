@@ -40,6 +40,11 @@ var board_size := 0
 ## Persistent option: which pre-built map to use for a new game.
 ## One of: "none" (open field), "spiral", "generate", or "custom:<name>".
 var map_type := "none"
+## Seed used the last time we built a Generated map. 0 = "no seed stored
+## yet; roll a fresh one on the next generation". On New Game with map_type
+## "generate" we ask whether to keep the same map (reuse this seed) or roll
+## a new one (clear to 0 first).
+var generated_seed: int = 0
 
 ## Best-ever wave reached and best-ever score, persisted across sessions.
 var best_wave := 0
@@ -127,6 +132,7 @@ func save_settings() -> void:
 	c.set_value("options", "round_timer_bonus", round_timer_bonus)
 	c.set_value("options", "map_type", map_type)
 	c.set_value("options", "board_size", board_size)
+	c.set_value("options", "generated_seed", generated_seed)
 	c.set_value("stats", "best_wave", best_wave)
 	c.set_value("stats", "best_score", best_score)
 	c.set_value("stats", "total_kills", total_kills)
@@ -153,6 +159,7 @@ func load_settings() -> void:
 		stored = "none"
 	map_type = stored
 	board_size = c.get_value("options", "board_size", board_size)
+	generated_seed = c.get_value("options", "generated_seed", generated_seed)
 	best_wave = c.get_value("stats", "best_wave", best_wave)
 	best_score = c.get_value("stats", "best_score", best_score)
 	total_kills = c.get_value("stats", "total_kills", total_kills)

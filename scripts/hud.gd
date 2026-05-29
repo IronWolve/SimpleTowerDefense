@@ -234,14 +234,62 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 ## "New Game" restarts the run; first press arms, second press confirms.
+## With map_type "generate" the confirm step first asks whether to keep the
+## same generated layout or roll a new one.
 func _on_new_game_pressed() -> void:
 	if _new_game_armed:
-		get_tree().reload_current_scene()
+		_restart_with_map_choice()
 		return
 	_new_game_armed = true
 	_new_game_armed_ms = Time.get_ticks_msec()
 	_newgame_button.text = "Confirm New Game"
 	_newgame_button.add_theme_color_override("font_color", Color(0.95, 0.5, 0.45))
+
+## Reload the scene, but on Generated maps first ask whether to reuse the
+## stored seed or roll a fresh one. Called from the Options "New Game"
+## button; the game-over Restart skips the prompt (always replays the same
+## map - that's what "Restart" means).
+func _restart_with_map_choice() -> void:
+	if GameState.map_type == "generate":
+		_show_generate_choice_popup()
+		return
+	get_tree().reload_current_scene()
+
+## Small Same / New / Cancel popup for the Generated map choice on restart.
+func _show_generate_choice_popup() -> void:
+	_close_quit_prompt()  # reuse the slot so we never stack two prompts
+	var root := ColorRect.new()
+	root.color = Color(0, 0, 0, 0.7)
+	root.size = Vector2(1280, 720)
+	add_child(root)
+	_quit_root = root  # reuses the existing close-on-Esc / right-click plumbing
+	var panel := _make_panel(Vector2(390, 250), Vector2(500, 220))
+	root.add_child(panel)
+	var label := Label.new()
+	label.text = "Generated map: keep the same layout, or roll a new one?"
+	label.position = Vector2(20, 24)
+	label.size = Vector2(460, 72)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 17)
+	panel.add_child(label)
+	var same := _make_button("Same map", Vector2(16, 140), Vector2(150, 56), 15)
+	same.pressed.connect(func() -> void:
+		_close_quit_prompt()
+		get_tree().reload_current_scene())
+	panel.add_child(same)
+	var fresh := _make_button("New map", Vector2(174, 140), Vector2(150, 56), 15)
+	fresh.pressed.connect(func() -> void:
+		GameState.generated_seed = 0
+		GameState.save_settings()
+		_close_quit_prompt()
+		get_tree().reload_current_scene())
+	panel.add_child(fresh)
+	var cancel := _make_button("Cancel", Vector2(332, 140), Vector2(150, 56), 15)
+	cancel.pressed.connect(func() -> void:
+		_disarm_new_game()
+		_close_quit_prompt())
+	panel.add_child(cancel)
 
 func _disarm_new_game() -> void:
 	_new_game_armed = false
@@ -251,6 +299,7 @@ func _disarm_new_game() -> void:
 ## Restore every option to its default and sync the toggles to match.
 func _on_reset_options_pressed() -> void:
 	GameState.map_type = "none"
+	GameState.generated_seed = 0  # next "Generated" pick rolls a fresh layout
 	GameState.bonus_lives_per_wave = true
 	GameState.unlimited_money = false
 	GameState.free_walls = false
@@ -1525,5 +1574,8 @@ func show_end_screen() -> void:
 	restart.text = "Restart"
 	restart.custom_minimum_size = Vector2(220, 64)
 	restart.add_theme_font_size_override("font_size", 26)
+	# Restart = retry the same run, including the same Generated layout (the
+	# seed is already persisted, so a plain reload reuses it). New Game from
+	# Options is where you get the Same / New / Cancel choice.
 	restart.pressed.connect(func(): get_tree().reload_current_scene())
 	vbox.add_child(restart)
