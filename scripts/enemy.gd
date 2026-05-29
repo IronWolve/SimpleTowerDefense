@@ -36,6 +36,10 @@ var _vuln_pct := 0.0
 var _vuln_timer := 0.0
 var _dead := false
 var _level: Level
+## Lagging "ghost" value used by the health-bar damage flash. After a hit it
+## sits above `health` and is lerped back down over a few frames, so even
+## tiny chips show up briefly as a yellow chunk to the right of the green.
+var _flash_health := 0.0
 
 func _ready() -> void:
 	add_to_group("enemies")
@@ -49,6 +53,7 @@ func setup(lvl: Level, hp: float, spd: float, rwd: int, col: Color, rad: float) 
 	reward = rwd
 	color = col
 	radius = rad
+	_flash_health = hp
 	cell = lvl.spawn_cell
 	position = lvl.cell_center(cell)
 	# Reuse the level's cached spawn->base route instead of recomputing a
@@ -124,6 +129,15 @@ func _process(delta: float) -> void:
 		_vuln_timer -= delta
 		if _vuln_timer <= 0.0:
 			_vuln_pct = 0.0
+	# Decay the damage-flash ghost back down toward current health (exponential
+	# catch-up). delta*6 means ~10% of the remaining gap closes per 60-Hz frame,
+	# so a chunk is half-gone in ~0.1s but still readable on tiny hits.
+	if _flash_health < health:
+		_flash_health = health  # heal (or init): snap up, no flash
+	else:
+		_flash_health = lerp(_flash_health, health, minf(1.0, delta * 6.0))
+		if _flash_health - health < max_health * 0.001:
+			_flash_health = health
 	queue_redraw()
 
 func _reach_base() -> void:
@@ -212,6 +226,7 @@ func restore(lvl: Level, d: Dictionary) -> void:
 		_dots[k] = {"dps": dts[k]["dps"], "timer": dts[k]["timer"]}
 	_vuln_pct = d.get("vuln_p", 0.0)
 	_vuln_timer = d.get("vuln_t", 0.0)
+	_flash_health = health
 	queue_redraw()
 
 func _die() -> void:
@@ -245,11 +260,26 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
 	_draw_body()
 	_draw_status()
+	# Health bar sits ABOVE the body (the old centred bar competed with the
+	# new vehicle bodies' turret/canopy). Fixed-min width of 32 px so tiny
+	# enemies still have enough resolution to read small damage; widens with
+	# radius for the bigger bosses.
 	var frac := clampf(health / max_health, 0.0, 1.0)
-	# Health bar runs horizontally across the enemy at its middle.
-	var bar_y := -2.0
-	draw_rect(Rect2(-radius, bar_y, radius * 2.0, 4.0), Color(0, 0, 0, 0.65))
-	draw_rect(Rect2(-radius, bar_y, radius * 2.0 * frac, 4.0), Color(0.30, 0.90, 0.35))
+	var flash_frac := clampf(_flash_health / max_health, 0.0, 1.0)
+	var bw := maxf(32.0, radius * 2.4)
+	var bh := 5.0
+	var bx := -bw * 0.5
+	var by := -radius - 8.0
+	# Black backing.
+	draw_rect(Rect2(bx, by, bw, bh), Color(0, 0, 0, 0.72))
+	# Yellow flash chunk: the segment of bar that's currently catching up to
+	# the green - sells "you just lost this much" even when individual hits
+	# would be subpixel against the full bar width.
+	if flash_frac > frac:
+		draw_rect(Rect2(bx + bw * frac, by, bw * (flash_frac - frac), bh),
+			Color(1.0, 0.78, 0.20))
+	# Green current-health chunk.
+	draw_rect(Rect2(bx, by, bw * frac, bh), Color(0.30, 0.90, 0.35))
 
 ## Top-down robot/vehicle bodies. All draw forward = +X, so the whole body
 ## rotates with _face. After drawing, the transform is reset so the health
