@@ -1,10 +1,15 @@
 extends Node
 ## Persistent run state. Autoloaded, so it survives scene reloads on restart.
 
-const STARTING_GOLD := 75
+const STARTING_GOLD := 240
 const STARTING_LIVES := 20
 const STARTING_WALLS := 30
-const STARTING_TOWERS := 3
+const STARTING_TOWERS := 0
+## Hard mode starting values (used when bonus_lives_per_wave is off). Explicit
+## numbers rather than a multiplier so each lever can be tuned independently.
+const HARD_STARTING_GOLD := 120
+const HARD_STARTING_LIVES := 10
+const HARD_STARTING_WALLS := 15
 const SETTINGS_PATH := "user://settings.cfg"
 ## Where custom maps saved from the editor are stored. One .txt per map.
 const MAPS_DIR := "user://maps"
@@ -109,14 +114,17 @@ func _process(delta: float) -> void:
 func reset() -> void:
 	# Capture the just-finished run's high before wiping it.
 	_check_best()
-	# Hard mode (bonus_lives_per_wave off): start with 40% less gold.
+	# Hard mode (bonus_lives_per_wave off): tighter gold / lives / wall stock.
 	var hard := not bonus_lives_per_wave
-	gold = int(round(STARTING_GOLD * 0.6)) if hard else STARTING_GOLD
-	lives = STARTING_LIVES
+	gold = HARD_STARTING_GOLD if hard else STARTING_GOLD
+	lives = HARD_STARTING_LIVES if hard else STARTING_LIVES
 	wave = 0
 	score = 0
 	game_over = false
-	stock = {"wall": STARTING_WALLS, "tower": STARTING_TOWERS}
+	stock = {
+		"wall": HARD_STARTING_WALLS if hard else STARTING_WALLS,
+		"tower": STARTING_TOWERS,
+	}
 	total_games += 1
 	last_played_unix = int(Time.get_unix_time_from_system())
 	save_settings()

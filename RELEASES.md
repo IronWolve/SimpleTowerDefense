@@ -11,16 +11,68 @@ Each release attaches four platform zips:
 
 | Platform | File |
 |---|---|
-| Windows | `SimpleTowerDefense_win_vNN.zip` |
-| Linux | `SimpleTowerDefense_linux_vNN.zip` |
-| macOS | `SimpleTowerDefense_osx_vNN.zip` |
-| Web | `SimpleTowerDefense_web_vNN.zip` |
+| Windows | `std2d_win_vNN.zip` |
+| Linux | `std2d_linux_vNN.zip` |
+| macOS | `std2d_osx_vNN.zip` |
+| Web | `std2d_web_vNN.zip` |
 
 **Notes:** the macOS build is unsigned — right-click → **Open** the first time to
 get past Gatekeeper. The Web build must be served over HTTP (a local server or
 host), not opened straight from disk.
 
 ---
+
+## v49 — 2D rename, hotkey overhaul, economy & balance pass
+
+Renamed to **Simple Tower Defense 2D**, a chunky hotkey overhaul (the upgrade
+keys now match the 3D version), a wider economy pass, and a pile of polish.
+
+**Identity & UI**
+- Renamed to **Simple Tower Defense 2D** across the title bar, Options panel,
+  Help, README and downloads (`std2d_<plat>_vNN.zip` from this version onward).
+- HUD bar gets a solid dark backing so it reads cleanly against the v48
+  graphics (the old default-themed panel had gone too see-through).
+
+**Hotkeys**
+- **Q** upgrades the selected tower once; **W** +10 levels; **E** +100;
+  **Shift+E** spends all your gold maxing it. (Old `Q` = max-upgrade is now
+  `Shift+E`.)
+- **D** deletes the piece under the cursor (quick single delete).
+- **F** toggles mass-delete (left-drag removes, `Alt`+drag clears a line).
+  Old `D` = mass-delete moved to `F` to make room for D = quick delete.
+- Speed cycle adds a **500×** stop between 100× and 1000×.
+
+**Gameplay**
+- **Bosses leaking actually hurts.** Beetles and spiders cost **5 lives**,
+  turtles **8** (normal enemies still cost 1).
+- **Visual shot throttle.** Fast towers cap their visible projectiles at
+  ~5/second so rapid fire reads as distinct rounds instead of a solid stream;
+  the extra shots between hit instantly for full damage.
+- **Bullets match their tower's color** (the old per-type palette overlapped —
+  Missile and Cannon were both orange, etc.).
+- **Range rebalance.** Base tower ranges roughly halved with per-type caps
+  (Bullet/Ice 160, Cannon 180, Laser 200, Missile 220, Sniper 300), and range
+  now grows every **2 levels** instead of every level. Damage and fire rate
+  keep scaling, so coverage matters early and DPS late.
+- **Generated map: Same / New prompt.** New Game on a Generated map now asks
+  whether to keep the same layout or roll a new one (the seed persists across
+  sessions). Game-over **Restart** always replays the same map.
+
+**Economy**
+- **Normal start: 240g, 20 lives, 30 free walls.** The 3 free Bullet Towers
+  are gone — that 120g of value rolled into the starting purse, so you spend
+  the same total but you choose what to build with it.
+- **Hard mode rebalance.** 120g, 10 lives, 15 free walls — explicit numbers
+  rather than the old "60% gold" multiplier so each lever can be tuned.
+
+**Project hygiene**
+- **MIT License** with a separately-fenced friendly note asking forks/mods to
+  drop a line on GitHub. (Not part of the license — license-detection tools
+  still see standard MIT.)
+- **`CHECKLIST.md`** — a living regression / parity checklist mirrored across
+  the 2D and 3D projects (gameplay numbers, controls, HUD, save/load, perf,
+  build/release).
+- **`TODO.md`** — scratchpad for ideas, balance-to-test, polish, known issues.
 
 ## v48 — Updated graphics
 

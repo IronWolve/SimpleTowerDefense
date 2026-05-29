@@ -5,7 +5,7 @@ extends CanvasLayer
 
 const BAR_Y := 600.0
 const APP_NAME := "Simple Tower Defense 2D"
-const APP_VERSION := "v48"
+const APP_VERSION := "v49"
 const BUY_TYPES := ["tower", "ice", "laser", "cannon", "sniper", "missile",
 	"gold", "amplifier",
 	"wall", "tar_trap", "poison_trap", "fire_trap", "spike_trap", "volcano_trap"]
@@ -33,7 +33,7 @@ const HELP_TEXT := _H + "Controls" + _HE + \
 """Runners are fast and resist Poison; Tanks are slow, tough and resist Fire. Each wave rotates a deploy style - Steady, Swarm (fast packs), Heavy (tanks), Squads (same-type bursts) - so no two in a row feel alike; the Next-wave label shows which. Boss waves hit at 5, 15, 25, ... with growing boss counts (1, 2, 3, 5, 7, ...) - a mix of beetles and spiders - trickled in 1-3 at a time alongside that wave's normal enemies. Each boss wave also brings tanky, slow Turtles (1 at wave 5, +1 each boss wave) that get tougher every boss level. Bosses leaking actually hurts: beetles and spiders cost 5 lives, turtles 8 (normal enemies still cost 1). Auto sends waves for you. With the 30s round timer on, sending a non-boss wave early grants bonus gold that grows +2% per wave.
 
 """ + _H + "Modifiers (Options)" + _HE + \
-"""Toggle in Options: Hard mode (no bonus lives, 40% less starting gold), Unlimited lives / money, No-cost walls, 30s round timer with early-send bonus, hold-drag wall building. Settings persist across sessions. Options also has Save / Load (unlimited named saves to disk), Quit (with a save prompt), board-size selection, and lifetime Stats.
+"""Toggle in Options: Hard mode (no bonus lives, half the starting gold/lives/walls), Unlimited lives / money, No-cost walls, 30s round timer with early-send bonus, hold-drag wall building. Settings persist across sessions. Options also has Save / Load (unlimited named saves to disk), Quit (with a save prompt), board-size selection, and lifetime Stats.
 
 """ + _H + "Maps & Editor" + _HE + \
 """In Options pick a pre-built map (Open field or Spiral), choose Generated for one continuous single-path labyrinth - no branches or dead ends, with a few solid 3x3 blocks to build tower clusters on (great for the Amplifier), a fresh layout each New Game (spawn/base move to the path's ends), or build your own: enable No-cost walls, lay out your walls in-game, type a name and press Save. Saved maps appear in the dropdown as "Custom - name". Click Maps Folder to open the save directory in your file manager (desktop only).
@@ -614,7 +614,7 @@ func _build_options() -> void:
 
 	# Group 2: modifiers that can be toggled at any time.
 	panel.add_child(_make_section("MODIFIERS", Vector2(32, 336)))
-	_hard_toggle = _make_toggle("Hard mode   (no bonus lives, less gold)", Vector2(30, 358),
+	_hard_toggle = _make_toggle("Hard mode   (no bonus lives; half gold/lives/walls)", Vector2(30, 358),
 		not GameState.bonus_lives_per_wave, _on_hard_option_toggled)
 	panel.add_child(_hard_toggle)
 	_lives_toggle = _make_toggle("Unlimited lives", Vector2(30, 402),
