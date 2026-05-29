@@ -1507,8 +1507,12 @@ func exit_delete_mode() -> bool:
 func spawn_float(pos: Vector2, text: String, col: Color) -> void:
 	if GameState.reduced_gfx():
 		return
+	# Small random jitter so back-to-back kills at the same spot don't stack
+	# into one unreadable blob. Horizontal range wider than vertical so the
+	# popups separate sideways but stay anchored on the enemy.
+	var jitter := Vector2(randf_range(-12.0, 12.0), randf_range(-4.0, 4.0))
 	_floats.append({
-		"pos": to_local(pos), "vel": Vector2(0.0, -34.0),
+		"pos": to_local(pos) + jitter, "vel": Vector2(0.0, -34.0),
 		"text": text, "col": col, "age": 0.0,
 	})
 	if _floats.size() > _FLOAT_CAP:
