@@ -88,10 +88,39 @@ var _drag_toggle: CheckButton
 var _timer_toggle: CheckButton
 var _lives_toggle: CheckButton
 var _options_button: Button
+## ---- POPUP / OVERLAY STATE MACHINE ----
+##
+## Several overlays can be on screen at once; each owns its visibility flag.
+## What CANNOT stack is shared in a single slot - currently `_modal_root`,
+## used by both the Quit prompt and the Generate-map "Same/New/Cancel"
+## prompt. Opening one closes the other (by design - both are full-screen
+## dim overlays with action buttons).
+##
+##   _popup            (Button)    Upgrade/Sell popup over the selected piece.
+##                                 Dismissed on Esc, right-click, action, or
+##                                 5s timeout.
+##   _info_popup       (Label)     Framed stats panel in the bottom info-box
+##                                 area, shown for hovered/selected pieces.
+##                                 Not modal; just renders or doesn't.
+##   _save_popup_root  (ColorRect) Save / Load Game dialog (full-screen dim).
+##   _modal_root       (ColorRect) Reused slot for Quit prompt OR Generate-
+##                                 map Same/New prompt. Only one at a time.
+##   _help_root        (ColorRect) How-to-play overlay.
+##   _stats_root       (ColorRect) Lifetime stats overlay.
+##   _options_root     (ColorRect) Options menu (also pauses the game).
+##   _end_root         (ColorRect) Game-over screen.
+##   _toast_label      (Label)     Top-centre transient status text.
+##
+## Esc close ORDER (in `_unhandled_key_input`):
+##   modal -> save popup -> help -> stats -> exit delete-mode -> options
+##   (so a modal always trumps the menu it sits over).
+##
+## Right-click anywhere (in `_input`):
+##   modal -> save popup -> help -> stats -> options -> upgrade popup.
 var _options_root: ColorRect
 var _help_root: ColorRect
 var _save_popup_root: ColorRect
-var _quit_root: ColorRect
+var _modal_root: ColorRect
 var _stats_root: ColorRect
 var _stats_body: RichTextLabel
 var _stats_body2: RichTextLabel
@@ -193,7 +222,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_ESCAPE:
 			# Esc closes the topmost popup, else toggles options. Transient modals
 			# (quit prompt, Save/Load popup) close first, before the options menu.
-			if _close_quit_prompt():
+			if _close_modal():
 				pass
 			elif _close_save_popup():
 				pass
@@ -216,7 +245,7 @@ func _input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_RIGHT):
 		return
-	if _close_quit_prompt():
+	if _close_modal():
 		get_viewport().set_input_as_handled()
 	elif _close_save_popup():
 		get_viewport().set_input_as_handled()
@@ -262,12 +291,12 @@ func _restart_with_map_choice() -> void:
 
 ## Small Same / New / Cancel popup for the Generated map choice on restart.
 func _show_generate_choice_popup() -> void:
-	_close_quit_prompt()  # reuse the slot so we never stack two prompts
+	_close_modal()  # reuse the slot so we never stack two prompts
 	var root := ColorRect.new()
 	root.color = Color(0, 0, 0, 0.7)
 	root.size = Vector2(1280, 720)
 	add_child(root)
-	_quit_root = root  # reuses the existing close-on-Esc / right-click plumbing
+	_modal_root = root  # reuses the existing close-on-Esc / right-click plumbing
 	var panel := _make_panel(Vector2(390, 250), Vector2(500, 220))
 	root.add_child(panel)
 	var label := Label.new()
@@ -280,20 +309,20 @@ func _show_generate_choice_popup() -> void:
 	panel.add_child(label)
 	var same := _make_button("Same map", Vector2(16, 140), Vector2(150, 56), 15)
 	same.pressed.connect(func() -> void:
-		_close_quit_prompt()
+		_close_modal()
 		get_tree().reload_current_scene())
 	panel.add_child(same)
 	var fresh := _make_button("New map", Vector2(174, 140), Vector2(150, 56), 15)
 	fresh.pressed.connect(func() -> void:
 		GameState.generated_seed = 0
 		GameState.save_settings()
-		_close_quit_prompt()
+		_close_modal()
 		get_tree().reload_current_scene())
 	panel.add_child(fresh)
 	var cancel := _make_button("Cancel", Vector2(332, 140), Vector2(150, 56), 15)
 	cancel.pressed.connect(func() -> void:
 		_disarm_new_game()
-		_close_quit_prompt())
+		_close_modal())
 	panel.add_child(cancel)
 
 func _disarm_new_game() -> void:
@@ -947,12 +976,12 @@ func _on_continue_pressed() -> void:
 
 ## Quit (Options). Asks whether to save the run first, then exits the game.
 func _on_quit_pressed() -> void:
-	_close_quit_prompt()  # never stack two
+	_close_modal()  # never stack two
 	var root := ColorRect.new()
 	root.color = Color(0, 0, 0, 0.7)
 	root.size = Vector2(1280, 720)
 	add_child(root)
-	_quit_root = root
+	_modal_root = root
 	var panel := _make_panel(Vector2(420, 268), Vector2(440, 196))
 	root.add_child(panel)
 	var label := Label.new()
@@ -973,16 +1002,16 @@ func _on_quit_pressed() -> void:
 	just_quit.pressed.connect(func() -> void: get_tree().quit())
 	panel.add_child(just_quit)
 	var cancel := _make_button("Cancel", Vector2(302, 126), Vector2(122, 52), 15)
-	cancel.pressed.connect(_close_quit_prompt)
+	cancel.pressed.connect(_close_modal)
 	panel.add_child(cancel)
 
 ## Close the quit prompt if open. Returns true if one was actually closed.
-func _close_quit_prompt() -> bool:
-	if _quit_root != null and is_instance_valid(_quit_root):
-		_quit_root.queue_free()
-		_quit_root = null
+func _close_modal() -> bool:
+	if _modal_root != null and is_instance_valid(_modal_root):
+		_modal_root.queue_free()
+		_modal_root = null
 		return true
-	_quit_root = null
+	_modal_root = null
 	return false
 
 ## A unique default save name (used when the name field is left blank), so the

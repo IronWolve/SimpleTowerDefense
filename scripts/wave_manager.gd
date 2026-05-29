@@ -79,6 +79,24 @@ var level: Level
 var auto_advance := true
 
 var _started := 0
+## Active spawn jobs. Each "Send Wave" can add 1-3 entries (a normal styled
+## stream, plus a boss group on boss waves, plus a turtle group on boss
+## waves). Each tick of _process decrements its timer; when timer <= 0 the
+## job spawns its next batch and resets the timer. When `remaining` hits 0
+## the job is removed from the list.
+##
+## Schema per job dict:
+##   kind        "normal" | "boss" | "turtle"
+##   def         the per-wave Dictionary returned by _build_def / _boss_def
+##               / _turtle_def (HP, speed, reward, color, radius, ...)
+##   wave        the wave number this job belongs to (so HP curves stay
+##               consistent if multiple waves are layered concurrently)
+##   remaining   enemies still to spawn from this job
+##   timer       seconds until the next spawn tick
+##   interval    (normal only) base inter-spawn interval, jittered per tick
+##
+## Serialised across save/load by serialize() / restore(); the `def` is
+## rebuilt from `wave` on load so the static stats don't need pickling.
 var _jobs: Array = []
 var _countdown := -1.0
 var _bonus_lives_through := 0

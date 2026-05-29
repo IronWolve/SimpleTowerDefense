@@ -195,13 +195,24 @@ func _dir_has_files(dir: String) -> bool:
 	d.list_dir_end()
 	return false
 
+## Hard cap on files we'll migrate from the old user-data dir. Real saves
+## top out around 100 KB; anything bigger is either corrupt or hostile and
+## not worth the OOM risk on a low-memory device.
+const _MIGRATION_MAX_FILE := 10 * 1024 * 1024  # 10 MiB
+
 func _copy_file(src: String, dst: String) -> void:
 	if not FileAccess.file_exists(src):
 		return
 	var sf := FileAccess.open(src, FileAccess.READ)
 	if sf == null:
 		return
-	var data := sf.get_buffer(sf.get_length())
+	var n := sf.get_length()
+	if n > _MIGRATION_MAX_FILE:
+		sf.close()
+		push_warning("Skipped migration of %s: %d bytes exceeds %d cap" %
+			[src, n, _MIGRATION_MAX_FILE])
+		return
+	var data := sf.get_buffer(n)
 	sf.close()
 	var df := FileAccess.open(dst, FileAccess.WRITE)
 	if df == null:

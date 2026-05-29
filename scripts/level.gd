@@ -134,11 +134,6 @@ func _build_custom_map(map_name: String) -> void:
 			if c < line.length() and line[c] == "1":
 				_place_map_wall(Vector2i(c, r))
 
-## Alt-click bulk upgrade: tries to upgrade the structure up to 10 times,
-## stopping early when can_upgrade() goes false or gold runs out.
-func _alt_upgrade_ten(s: Structure) -> void:
-	_bulk_upgrade(s, 10)
-
 ## Upgrade a piece up to `limit` times, stopping when it can't upgrade further
 ## or gold runs out. `limit` also guards against runaway loops (e.g. unlimited
 ## money on a level-uncapped tower).
@@ -283,6 +278,10 @@ func _load_pieces(data: Dictionary) -> void:
 		s.position = cell_center(c)
 		s.cell = c
 		_container_for(t).add_child(s)
+		# setup_piece initialised the piece at level 1; patch level + invested
+		# from the snapshot and re-stat so its effective values match the save.
+		# (The level-1 _apply_stats inside setup_piece is wasted - acceptable
+		# at load time since it's one-shot, not a hot path.)
 		s.setup_piece(t, self, bool(pd.get("stock", false)))
 		s.level = int(pd.get("lvl", 1))
 		s.gold_invested = int(pd.get("inv", 0))
@@ -922,6 +921,15 @@ func has_path() -> bool:
 ## The cached spawn->base route, refreshed by _update_preview() whenever the
 ## maze changes. Enemies copy this instead of each running their own full-board
 ## BFS - critical when a cluster (and bosses) spawn in the same frame.
+##
+## CONTRACT vs bfs_path:
+##   spawn_path()    -> returns a COPY of the cached spawn->base route.
+##                     O(1) amortised; the cache is refreshed at most once per
+##                     frame in _process when _paths_dirty is set. Use this
+##                     for enemy spawning and any other "give me THE route".
+##   bfs_path(a, b)  -> recomputes the route every call. O(cells). Use only
+##                     when start or goal isn't `spawn_cell`/`base_cell`,
+##                     e.g. an enemy repath()ing from its current position.
 func spawn_path() -> Array[Vector2i]:
 	if _preview.is_empty():
 		return bfs_path(spawn_cell, base_cell)
@@ -958,7 +966,11 @@ func bfs_path(start: Vector2i, goal: Vector2i) -> Array[Vector2i]:
 	result.reverse()
 	return result
 
-## True if base stays reachable from spawn and every live enemy with `extra` blocked.
+## "If I placed a wall at `extra`, would spawn->base still be reachable AND
+## would every live enemy still have a route to the base?" Used during the
+## _can_place check so a placement that would orphan the base (or trap an
+## enemy in a dead pocket) gets rejected up front. BFS runs FROM the base
+## outwards so we can answer both questions in one sweep.
 func _path_ok_with_extra(extra: Vector2i) -> bool:
 	var seen := {base_cell: true}
 	var queue: Array[Vector2i] = [base_cell]
@@ -1213,7 +1225,8 @@ func _on_click(pos: Vector2, is_right: bool) -> void:
 			# Select first so the piece (and its range circle) redraws with the
 			# new stats after the bulk upgrade, just like a normal upgrade.
 			_select_structure(existing)
-			_alt_upgrade_ten(existing)
+			# Alt-click: bulk upgrade up to 10 times (stops at level cap / no gold).
+			_bulk_upgrade(existing, 10)
 			return
 		_select_structure(existing)
 		hud.show_popup(existing, "upgrade")
