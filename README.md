@@ -15,7 +15,7 @@ An endless, maze-building tower defense game made in **Godot 4.6** (GL Compatibi
 - **Difficulty modifiers** — Hard mode (no bonus lives, less gold), unlimited lives/money, free walls, round-timer gold bonus, board size, and more, all persisted between sessions.
 - **Quality of life** — undo, drag-to-place, bulk upgrades (**Q** +1, **W** +10, **E** +100, **Shift+E** dumps all your gold into one tower), single-piece delete (**D**) and **mass-delete mode** (**F**), send the next **10 / 100 waves** (**T** / **Y**), abbreviated big numbers (12.3K / 4.5M), per-tower range/AOE caps so a maxed tower can't blanket the map, lifetime stats, a Quit-with-save option, and high-speed graphics reduction (up to 1000×).
 
-![Help panel](screenshots/help.jpg)
+<img src="screenshots/help.jpg" alt="Help panel" width="320">
 
 ## Towers
 
