@@ -22,6 +22,30 @@ host), not opened straight from disk.
 
 ---
 
+## v55 — Audit cleanup (maintenance release)
+
+No gameplay or balance changes. Internal cleanup landing the lower-
+severity findings from the v54 codebase audit so the next feature work
+sits on a tidier base.
+
+- **Modal popup state machine documented.** The HUD's overlay layout is
+  now a single big docstring block: which popup uses which root, what
+  can coexist with what, and the Esc / right-click close orders.
+- **`_quit_root` renamed to `_modal_root`** — same slot, accurate name
+  (it's reused by both the Quit prompt and the Generate-map Same/New
+  prompt). `_close_quit_prompt` → `_close_modal` to match.
+- **Pathfinding contract documented.** `spawn_path()` returns a copy of
+  the cached `_preview`; `bfs_path()` recomputes from scratch. Use the
+  cached one for spawning. `_path_ok_with_extra` also gained a docstring
+  explaining the BFS-from-base trick.
+- **WaveManager `_jobs` schema documented.** The per-job dict shape
+  (`kind` / `def` / `wave` / `remaining` / `timer` / `interval`) and the
+  lifecycle that the static doc top covers.
+- **Migration safety.** `_copy_file` (used by the v49 user-data
+  migration) now refuses files larger than 10 MiB; logs a warning on
+  skip.
+- **Dead code removal.** Single-line wrapper `_alt_upgrade_ten` inlined.
+
 ## v54 — Laser beam colour fix + documentation pass
 
 A small visual fix and a big internal documentation pass — no gameplay
