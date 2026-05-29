@@ -22,6 +22,43 @@ host), not opened straight from disk.
 
 ---
 
+## v54 — Laser beam colour fix + documentation pass
+
+A small visual fix and a big internal documentation pass — no gameplay
+changes, no balance changes.
+
+**Laser beam matches its tower**
+- The v49 "bullets take the tower's body colour" rule was missed on laser
+  beams. They were still using the old per-type `bullet_color`. So the red
+  Laser was firing a pink beam, etc. Beams now use the tower's body colour
+  same as projectiles — the red Laser beams red, the (hypothetical green)
+  Laser would beam green, and so on.
+- The vestigial `bullet_color` member is removed from `tower.gd` and the
+  `bullet_color` field is removed from every `PieceData.TYPES` entry —
+  fully dead code is gone.
+
+**Documentation pass**
+Eight functions / modules got proper docstring blocks for things that
+were easy to misread on a future change. No code changes - just
+comments. Covers:
+- The generator's 5 invariants (one continuous path, no empty space,
+  blocks only from `_ham_blocked`, etc.) — at the top of
+  `_build_generated_map`. Also mirrored in CHECKLIST.md.
+- The damage pipeline in `enemy.gd::take_damage` — resists are
+  multipliers (not reductions), vuln stacks on top.
+- The two-cooldown design in `tower.gd::_process` — `_cooldown` gates
+  damage, `_visual_cd` gates the bullet visual; collapsing them
+  would either nerf DPS or restore the laser-stream look.
+- Tower / trap scaling formulas in `piece_data.gd` written out in
+  full so future balance tuning doesn't have to reverse-engineer
+  `pow(1 + 0.4 * n, 1.4)` from scratch.
+- Spatial buckets in `level.gd` — why they exist, what changes if
+  you touch `BUCKET_SIZE`, and the "don't replace with group scans"
+  warning.
+- `game_state.gd` — score vs. gold semantics, stock dict contract.
+- `wave_manager.gd` — HP/reward curves, boss multiplier, turtle
+  ride-along, boss-leak constants.
+
 ## v53 — Generated maps: revert thinning, add block-shape variety
 
 The v51 / v52 "cluster thinning" was the wrong tool. It removed most of

@@ -19,7 +19,6 @@ var range_radius := 150.0
 var fire_rate := 1.7
 var damage := 13.0
 var color := Color.WHITE
-var bullet_color := Color.WHITE
 var slow := 0.0
 var slow_time := 0.0
 var aoe_radius := 0.0
@@ -35,7 +34,6 @@ func _apply_stats() -> void:
 	fire_rate = s["fire_rate"]
 	damage = s["damage"]
 	color = s["color"]
-	bullet_color = s["bullet_color"]
 	slow = s["slow"]
 	slow_time = s["slow_time"]
 	aoe_radius = s["aoe_radius"]
@@ -277,8 +275,10 @@ func _draw() -> void:
 			var t := node as Enemy
 			if t != null and t.is_alive():
 				var lp := t.position - position
-				draw_line(Vector2.ZERO, lp, Color(bullet_color, 0.85), 3.0)
-				draw_circle(lp, 5.0, bullet_color)
+				# Beam uses the tower's body colour (matches the v49 projectile-
+				# colour rule). Was bullet_color until v54.
+				draw_line(Vector2.ZERO, lp, Color(color, 0.85), 3.0)
+				draw_circle(lp, 5.0, color)
 	# Support towers (Gold/Amp) have no range/AOE, so don't draw a range circle.
 	if selected and mode != "support" and range_radius > 0.0:
 		draw_circle(Vector2.ZERO, range_radius, Color(1, 1, 1, 0.06))
