@@ -5,7 +5,7 @@ extends CanvasLayer
 
 const BAR_Y := 600.0
 const APP_NAME := "Simple Tower Defense 2D"
-const APP_VERSION := "v55"
+const APP_VERSION := "v58"
 const BUY_TYPES := ["tower", "ice", "laser", "cannon", "sniper", "missile",
 	"gold", "amplifier",
 	"wall", "tar_trap", "poison_trap", "fire_trap", "spike_trap", "volcano_trap"]
@@ -15,7 +15,7 @@ const _HE := "[/b][/color][/font_size]\n"
 const HELP_TEXT := _H + "Controls" + _HE + \
 """Mouse wheel zooms; hold middle button and drag to pan when zoomed in. Speed button: left-click faster, right-click slower (1/4x to 1000x). Pause freezes the game. Hold Alt and drag with any piece selected to place (or remove walls) in a straight line. Alt + left-click a placed turret upgrades it ten levels at once (stops when gold runs out). With a tower/trap selected: Q upgrades it once, W +10 levels, E +100, Shift+E pours all your remaining gold into maxing it out. Alt + Send Wave (or Alt+Enter) queues the next 10 waves, fired one at a time.
 
-[b]Keys:[/b] [color=#f2d26b][b]Space[/b][/color] pauses, [color=#f2d26b][b]Enter[/b][/color] sends the next wave, [color=#f2d26b][b]T[/b][/color] sends 10 waves, [color=#f2d26b][b]Y[/b][/color] sends 100 waves, [color=#f2d26b][b]Q[/b][/color] upgrades the selected tower once, [color=#f2d26b][b]W[/b][/color] +10 levels, [color=#f2d26b][b]E[/b][/color] +100 levels, [color=#f2d26b][b]Shift+E[/b][/color] spends all gold maxing it, [color=#f2d26b][b]D[/b][/color] deletes the piece under the cursor, [color=#f2d26b][b]F[/b][/color] toggles mass-delete (left-drag removes pieces, [color=#f2d26b][b]Alt[/b][/color] = a whole line), [color=#f2d26b][b]Z[/b][/color] undoes, [color=#f2d26b][b]+/-[/b][/color] adjusts speed, [color=#f2d26b][b]Esc[/b][/color] toggles Options (or closes Help).
+[b]Keys:[/b] [color=#f2d26b][b]Space[/b][/color] pauses, [color=#f2d26b][b]Enter[/b][/color] sends the next wave, [color=#f2d26b][b]T[/b][/color] sends 10 waves, [color=#f2d26b][b]Y[/b][/color] sends 100 waves, [color=#f2d26b][b]Q[/b][/color] upgrades the selected tower once, [color=#f2d26b][b]W[/b][/color] +10 levels, [color=#f2d26b][b]E[/b][/color] +100 levels, [color=#f2d26b][b]Shift+E[/b][/color] spends all gold maxing it, [color=#f2d26b][b]D[/b][/color] deletes the piece under the cursor, [color=#f2d26b][b]F[/b][/color] toggles mass-delete (left-drag removes pieces, [color=#f2d26b][b]Alt[/b][/color] = a whole line), [color=#f2d26b][b]Z[/b][/color] undoes, [color=#f2d26b][b]+/-[/b][/color] adjusts speed, [color=#f2d26b][b]Esc[/b][/color] toggles Options (or closes Help), [color=#f2d26b][b]F11[/b][/color] toggles fullscreen.
 
 """ + _H + "Goal" + _HE + \
 """Build a maze of walls to route enemies toward your towers and defend. Enemies that reach the exit cost lives - the run ends at zero. The game is endless; survive as long as you can. Best wave / score is shown on the game-over screen.

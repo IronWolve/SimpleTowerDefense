@@ -22,6 +22,17 @@ host), not opened straight from disk.
 
 ---
 
+## v58 — Fullscreen toggle (F11)
+
+- **F11 toggles borderless fullscreen** and back. The choice is saved
+  alongside the other Options settings, so the next launch starts in
+  whichever mode you left.
+- Borderless (not exclusive) mode so alt-tab stays instant and multi-
+  monitor setups don't fight over focus.
+- Web build is unchanged — browsers own F11 / fullscreen there.
+- Help panel updated to list the new key. (Alt+Enter was already taken
+  by "queue 10 waves", so fullscreen is F11 only.)
+
 ## v57 — Kill-gold popup / hit-spark position fix
 
 Floating "+gold" kill rewards and bullet-impact sparks now appear on the

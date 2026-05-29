@@ -8,6 +8,8 @@ var hud: HUD
 func _ready() -> void:
 	Engine.time_scale = 1.0
 	get_tree().paused = false
+	# Restore the windowed/fullscreen mode the user left on last quit.
+	_apply_fullscreen(GameState.fullscreen)
 	# Resuming a saved run? Restore economy now; the board and wave counters come
 	# back as their nodes are created. Otherwise start a fresh run.
 	var loading: bool = not GameState.pending_load.is_empty()
@@ -50,3 +52,25 @@ func _ready() -> void:
 
 func _on_game_over() -> void:
 	hud.show_end_screen()
+
+## Toggle borderless fullscreen with F11. Persists the choice so the next
+## launch comes up the same way. Web exports ignore the call (browsers
+## handle their own fullscreen via F11 already).
+func _unhandled_input(event: InputEvent) -> void:
+	if not (event is InputEventKey):
+		return
+	var k := event as InputEventKey
+	if not k.pressed or k.echo:
+		return
+	if k.keycode == KEY_F11:
+		GameState.fullscreen = not GameState.fullscreen
+		_apply_fullscreen(GameState.fullscreen)
+		GameState.save_settings()
+		get_viewport().set_input_as_handled()
+
+func _apply_fullscreen(on: bool) -> void:
+	if OS.has_feature("web"):
+		return  # browser owns the fullscreen state
+	var mode := DisplayServer.WINDOW_MODE_FULLSCREEN if on \
+		else DisplayServer.WINDOW_MODE_WINDOWED
+	DisplayServer.window_set_mode(mode)

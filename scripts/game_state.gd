@@ -86,6 +86,11 @@ var map_type := "none"
 ## a new one (clear to 0 first).
 var generated_seed: int = 0
 
+## Persistent option: borderless fullscreen on (true) vs windowed (false).
+## Toggled in-game with F11. Applied at boot from save_settings file so the
+## window comes up the way it was left.
+var fullscreen: bool = false
+
 ## Best-ever wave reached and best-ever score, persisted across sessions.
 var best_wave := 0
 var best_score := 0
@@ -277,6 +282,7 @@ func save_settings() -> void:
 	c.set_value("options", "map_type", map_type)
 	c.set_value("options", "board_size", board_size)
 	c.set_value("options", "generated_seed", generated_seed)
+	c.set_value("options", "fullscreen", fullscreen)
 	c.set_value("stats", "best_wave", best_wave)
 	c.set_value("stats", "best_score", best_score)
 	c.set_value("stats", "total_kills", total_kills)
@@ -304,6 +310,7 @@ func load_settings() -> void:
 	map_type = stored
 	board_size = c.get_value("options", "board_size", board_size)
 	generated_seed = c.get_value("options", "generated_seed", generated_seed)
+	fullscreen = c.get_value("options", "fullscreen", fullscreen)
 	best_wave = c.get_value("stats", "best_wave", best_wave)
 	best_score = c.get_value("stats", "best_score", best_score)
 	total_kills = c.get_value("stats", "total_kills", total_kills)
