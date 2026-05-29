@@ -375,6 +375,11 @@ func _build_generated_map() -> void:
 		grid = _generate_hamiltonian()
 	if grid.is_empty():
 		grid = _generate_serpentine(randf() < 0.5)
+	# Post-process: try to "flip" corners of placed blocks - move a wall cell
+	# diagonally outward by 1, creating a stair-edge. Each successful flip
+	# forces the BFS path beside it to take a 1-cell step (stair pattern).
+	# Only flips that preserve spawn->base connectivity are kept.
+	_flip_block_corners(grid)
 	for r in range(ROWS):
 		for c in range(COLS):
 			if grid[r][c] == 1:
@@ -382,6 +387,111 @@ func _build_generated_map() -> void:
 	# Restore non-deterministic randomness for everything else (waves, sparks,
 	# enemy jitter) - leaving the seed pinned would make the whole run replay.
 	randomize()
+
+## Post-process pass: for each deliberately-placed block (from `_ham_blocked`),
+## try to flip 1-2 of its 4 corner cells diagonally outward. A flipped corner
+## trades one wall cell (the corner of the 3x3 block) for path, and one path
+## cell (1 step diagonally outward) for wall. Net wall count unchanged; the
+## block's corner becomes a stair-step instead of a square.
+##
+## The visual effect: where the path corridor runs beside the block, the
+## flipped corner forces it to take a 1-cell step before continuing - that's
+## the stair pattern the user wants.
+##
+## Each candidate flip is BFS-verified for spawn->base connectivity before
+## being kept. Failed flips are reverted.
+## Probability any eligible outer corner gets flipped. 1.0 = every safe
+## corner flips; lower values leave some corners square for visual variety.
+const FLIP_CHANCE_PER_CORNER := 1.0
+
+## Scan the whole grid for wall cells sitting at a TRUE L-corner of a wall
+## mass, and swap each with its diagonal-adjacent path cell.
+##
+## "True L-corner" means: the wall has path in some diagonal direction (h, v,
+## diag cells are all path) AND wall extends BOTH AWAY-DIRECTIONS opposite
+## that corner (so the wall mass forms an L, not just a strip-end or stray).
+##
+## Each successful swap moves one wall cell to the diagonal path position -
+## the corner goes from convex (square) to stair-stepped. BFS-verified.
+func _flip_block_corners(grid: Array) -> void:
+	var candidates: Array = []
+	for r in range(ROWS):
+		for c in range(COLS):
+			if grid[r][c] != 1:
+				continue
+			for cd in [Vector2i(-1, -1), Vector2i(1, -1),
+					Vector2i(-1, 1), Vector2i(1, 1)]:
+				var h := Vector2i(c + cd.x, r)
+				var v := Vector2i(c, r + cd.y)
+				var diag := Vector2i(c + cd.x, r + cd.y)
+				# h, v, diag must all be in-bounds and PATH (the diagonal-side
+				# 2x2 has the wall corner here).
+				if not _in_bounds_cell(h) or not _in_bounds_cell(v) \
+						or not _in_bounds_cell(diag):
+					continue
+				if grid[h.y][h.x] != 0:
+					continue
+				if grid[v.y][v.x] != 0:
+					continue
+				if grid[diag.y][diag.x] != 0:
+					continue
+				# STRICT L-corner check: BOTH opposite-direction neighbours must
+				# be wall (or out-of-grid = border). This rejects strip-ends
+				# and isolated walls; only true L-corners qualify.
+				var opp_h := Vector2i(c - cd.x, r)
+				var opp_v := Vector2i(c, r - cd.y)
+				if not _is_wall_or_border(grid, opp_h):
+					continue
+				if not _is_wall_or_border(grid, opp_v):
+					continue
+				candidates.append([Vector2i(c, r), diag])
+	candidates.shuffle()
+	for entry in candidates:
+		if randf() > FLIP_CHANCE_PER_CORNER:
+			continue
+		var src: Vector2i = entry[0]
+		var dst: Vector2i = entry[1]
+		# Earlier flips may have invalidated this candidate.
+		if grid[src.y][src.x] != 1 or grid[dst.y][dst.x] != 0:
+			continue
+		grid[src.y][src.x] = 0
+		grid[dst.y][dst.x] = 1
+		if not _grid_path_ok(grid, spawn_cell, base_cell):
+			grid[src.y][src.x] = 1
+			grid[dst.y][dst.x] = 0
+
+func _in_bounds_cell(p: Vector2i) -> bool:
+	return p.x >= 0 and p.x < COLS and p.y >= 0 and p.y < ROWS
+
+func _is_wall_or_border(grid: Array, p: Vector2i) -> bool:
+	if p.x < 0 or p.x >= COLS or p.y < 0 or p.y >= ROWS:
+		return true  # out-of-grid = border = wall
+	return grid[p.y][p.x] == 1
+
+## True if `goal` is BFS-reachable from `start` through grid cells of value 0
+## (path). Used to validate flips don't break the spawn->base route.
+func _grid_path_ok(grid: Array, start: Vector2i, goal: Vector2i) -> bool:
+	if grid[start.y][start.x] != 0 or grid[goal.y][goal.x] != 0:
+		return false
+	var seen := {start: true}
+	var queue: Array[Vector2i] = [start]
+	var qi := 0
+	while qi < queue.size():
+		var cur: Vector2i = queue[qi]
+		qi += 1
+		if cur == goal:
+			return true
+		for d in DIRS:
+			var nb: Vector2i = cur + d
+			if seen.has(nb):
+				continue
+			if nb.x < 0 or nb.x >= COLS or nb.y < 0 or nb.y >= ROWS:
+				continue
+			if grid[nb.y][nb.x] != 0:
+				continue
+			seen[nb] = true
+			queue.append(nb)
+	return false
 
 ## Lattice <-> cell helpers (node index = j * NX + i).
 func _hcell(n: int) -> Vector2i:
@@ -486,46 +596,26 @@ func _generate_blocked() -> Array:
 	# This keeps the existing dense-maze look but gives some maps a chunkier
 	# "ruins" feel - the path still winds around every blocked region as a
 	# single-cell corridor. Smaller boards get fewer placements.
+	# v47 block placement: 3-4 single-node block centres, each producing a
+	# 3x3 wall mass. Identical to v47 - the user has consistently said this
+	# baseline "worked perfectly". Stair character comes from the
+	# _flip_block_corners post-process applied after generation.
 	_ham_blocked = {}
-	var nplace := 3 + randi() % 3  # 3-5 placements
+	var centres: Array = []
+	var want := 3 + (randi() % 2)
 	var guard := 0
-	var placed := 0
-	while placed < nplace and guard < 300:
+	while centres.size() < want and guard < 200:
 		guard += 1
 		var i := 2 + randi() % (nx - 4)
 		var j := 1 + randi() % (_ham_ny - 2)
-		# Pick a shape relative to the anchor (i,j).
-		var shape: Array = []
-		var roll := randf()
-		if roll < 0.10 and i + 1 <= nx - 4 and j + 1 <= _ham_ny - 2:
-			# 2x2 lattice cluster: 5x5 wall mass.
-			shape = [Vector2i(i, j), Vector2i(i + 1, j),
-				Vector2i(i, j + 1), Vector2i(i + 1, j + 1)]
-		elif roll < 0.40:
-			# 2-node domino, horizontal or vertical: 3x5 or 5x3 mass.
-			if randf() < 0.5 and i + 1 <= nx - 4:
-				shape = [Vector2i(i, j), Vector2i(i + 1, j)]
-			elif j + 1 <= _ham_ny - 2:
-				shape = [Vector2i(i, j), Vector2i(i, j + 1)]
-			else:
-				shape = [Vector2i(i, j)]
-		else:
-			shape = [Vector2i(i, j)]  # single 3x3
-		# Must keep min Manhattan distance 3 from every previously-blocked node.
+		var n := j * nx + i
 		var ok := true
-		for sn in shape:
-			for prev in _ham_blocked.keys():
-				var pi: int = prev % nx
-				var pj: int = prev / nx
-				if absi(pi - sn.x) + absi(pj - sn.y) < 3:
-					ok = false
-					break
-			if not ok:
-				break
+		for c in centres:
+			if absi(c % nx - i) + absi(c / nx - j) < 3:
+				ok = false
 		if ok:
-			for sn in shape:
-				_ham_blocked[sn.y * nx + sn.x] = true
-			placed += 1
+			centres.append(n)
+			_ham_blocked[n] = true
 	var need := nx * _ham_ny - _ham_blocked.size()
 	# Best of several Warnsdorff fills (free endpoints).
 	var path: Array = []

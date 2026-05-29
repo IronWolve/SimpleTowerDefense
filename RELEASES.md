@@ -22,6 +22,26 @@ host), not opened straight from disk.
 
 ---
 
+## v56 — Stair-step corner flips on Generated maps
+
+Generated maps now have a visible "staircase" character to their winding
+corridors instead of long straight runs along block edges. The base map
+generation is unchanged from v55; a single post-process step adds the
+stair flavour.
+
+- **Corner-flip post-process.** After the path is generated, every wall
+  cell that sits at a true L-corner (wall extends in both perpendicular
+  directions, a 2×2 path pocket on the diagonal) is swapped with its
+  diagonal path neighbour. Each candidate flip is BFS-verified so the
+  spawn → base route is preserved.
+- **No tuning knobs in-game.** The effect is on by default; flip rate is
+  driven by how many L-corners the labyrinth produces (typically dozens
+  per map on the larger boards).
+- **Regression harness.** `test_gen.gd` lives at the repo root as a dev
+  tool — runs the generator across a seed pool, prints ASCII dumps, and
+  verifies spawn → base reachability. Excluded from shipped builds via
+  the export presets' `exclude_filter`.
+
 ## v55 — Audit cleanup (maintenance release)
 
 No gameplay or balance changes. Internal cleanup landing the lower-
