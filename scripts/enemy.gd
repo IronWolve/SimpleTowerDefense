@@ -257,7 +257,10 @@ func _die() -> void:
 	GameState.total_kills += 1
 	# Drifting "+gold" reward popup, in the wave-info gold colour.
 	if _level != null:
-		_level.spawn_float(position, "+%s" % GameState.abbrev(gold_award),
+		# spawn_float expects a GLOBAL position (it runs to_local on it).
+		# Pass global_position so the popup sits on the enemy even when
+		# Level is zoomed/panned (scale and position are non-identity).
+		_level.spawn_float(global_position, "+%s" % GameState.abbrev(gold_award),
 			Color(0.96, 0.84, 0.46))
 	queue_free()
 

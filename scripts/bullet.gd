@@ -98,7 +98,8 @@ func _hit() -> void:
 					e.apply_slow(slow, slow_time)
 		# Bigger spark burst at the impact point for AOE shots.
 		if level_ref != null:
-			level_ref.spawn_sparks(_dest, color, 10)
+			# _dest is in Level-local space; spawn_sparks wants global.
+			level_ref.spawn_sparks(level_ref.to_global(_dest), color, 10)
 		_exploding = true
 		_boom = 0.0
 		queue_redraw()
@@ -109,7 +110,9 @@ func _hit() -> void:
 			target.apply_slow(slow, slow_time)
 		# Small spark pop on a clean single-target hit.
 		if level_ref != null:
-			level_ref.spawn_sparks(target.position, color, 6)
+			# spawn_sparks expects GLOBAL coords; target.position is Level-local
+			# and gets mis-mapped once Level is zoomed/panned.
+			level_ref.spawn_sparks(target.global_position, color, 6)
 	queue_free()
 
 func _draw() -> void:

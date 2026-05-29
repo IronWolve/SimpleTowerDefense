@@ -22,6 +22,19 @@ host), not opened straight from disk.
 
 ---
 
+## v57 — Kill-gold popup / hit-spark position fix
+
+Floating "+gold" kill rewards and bullet-impact sparks now appear on the
+enemy / impact point on every board, not offset by the board's zoom and
+pan.
+
+- **Latent since v48.** The float / spark spawners apply `to_local()` to
+  their input, which expects a *global* position. Callers were passing
+  the enemy's (or bullet's) Level-local `position` — fine when the board
+  fits at 1.0× zoom, but on larger boards the auto-fit zoom is below 1.0
+  and Level's transform pushed the popups off the target. Now passes
+  `global_position` (or `Level.to_global()` for the bullet's AOE dest).
+
 ## v56 — Stair-step corner flips on Generated maps
 
 Generated maps now have a visible "staircase" character to their winding
