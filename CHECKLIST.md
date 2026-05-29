@@ -161,6 +161,49 @@ file (port, diverge, or N/A).
 
 ---
 
+## Generated maps (`level.gd::_build_generated_map`)
+
+### Invariants — DO NOT BREAK
+Every Generated map MUST satisfy ALL of these. Violating any one of them is
+a regression — this is what failed in v51/v52 and produced empty maps. The
+full block of context lives at the top of `_build_generated_map`; this is
+the short version for at-a-glance sanity check.
+
+- [ ] **One continuous path** from spawn to base. Single connected route,
+  no extra reachable regions, no isolated open pockets.
+- [ ] **Single-cell-wide corridor.** The path never widens into a "room"
+  or open area.
+- [ ] **Path never crosses or touches itself.** Hamiltonian invariant: each
+  lattice node is visited exactly once. Backbite randomization preserves
+  this; ANY new path-mutation step must too.
+- [ ] **No empty cells outside the path.** Every non-path cell is either a
+  wall or part of a deliberate block. If you see a blank cell that isn't
+  the corridor, something is wrong.
+- [ ] **Deliberate blocks come from `_ham_blocked`.** 3-5 lattice nodes
+  marked blocked; their 3×3 / 3×5 / 5×3 / 5×5 wall footprint is the only
+  structural variation. The rest of the wall mass is "whatever cells the
+  path didn't carve."
+
+### When making changes
+- [ ] Modifications should change WHERE the path goes or WHERE blocks are
+  placed — NOT add post-processing that erodes wall mass or carves new
+  openings (that's what broke v51/v52).
+- [ ] **Verify by dumping ASCII before committing.** Quick test harness
+  pattern: write a one-off `SceneTree` script that instantiates `Level.new()`
+  (no scene tree needed for the generator), sets `COLS`/`ROWS`, seeds, runs
+  `_generate_blocked` a half-dozen times with fixed seeds, prints each
+  grid with `#` (walls) `.` (path) `@` (blocked centres) `S`/`B` (spawn/base).
+  Read the output, confirm invariants 1-5 hold. Delete the script after.
+
+### Seed handling
+- [ ] `GameState.generated_seed` (persisted) drives layout. Same seed =
+  identical map. "Same map" New Game replays it; "New map" clears to 0.
+- [ ] `_build_generated_map` calls `seed(GameState.generated_seed)` BEFORE
+  generation and `randomize()` AFTER, so waves / sparks / enemy jitter
+  aren't locked to the seed.
+
+---
+
 ## Performance gates
 
 - [ ] `GameState.reduced_gfx()` threshold = `Engine.time_scale >= 4.0`

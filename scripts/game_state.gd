@@ -31,11 +31,29 @@ const MAP_FORMAT_VERSION := 1
 const OLD_PROJECT_NAME := "Tower Defense"
 const NEW_PROJECT_NAME := "Simple Tower Defense 2D"
 
+## Spendable currency. Goes up on kills (kill reward + Gold Mine bonus),
+## down on placement / upgrade. Capped only by signed-int range. The HUD
+## shows it abbreviated above ~10K.
 var gold := STARTING_GOLD
 var lives := STARTING_LIVES
+## Current wave NUMBER. Goes up when WaveManager actually launches a wave;
+## a "queued" send-N waves doesn't bump it until each fires. Best-wave stat
+## compares against this.
 var wave := 0
+## Cumulative SCORE for the run. NOT the same as gold - score reflects how
+## much enemy reward you generated this run regardless of how you spent it,
+## so it's the right comparison for the best-score stat. Kill reward adds
+## both gold and score, but sell refunds only return gold.
 var score := 0
 var game_over := false
+## Free-piece stock counters. Only "wall" and "tower" (the basic Bullet
+## Tower) get stock. Every other tower and every trap is paid from gold
+## the moment it's placed - no free first one. Stock counts down on each
+## free placement; when it hits 0, the buy button switches from
+## "Wall x30" to "Wall $10" and the player starts paying gold.
+##
+## DO NOT add other types to this dict without also wiring stock_changed
+## events and updating the HUD buy-button render in _refresh_buy_buttons.
 var stock := {"wall": STARTING_WALLS, "tower": STARTING_TOWERS}
 
 ## Set to a save snapshot just before reload_current_scene() to resume a run

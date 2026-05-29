@@ -325,6 +325,34 @@ var _ham_ny := 0
 var _ham_base_row := 0
 var _ham_blocked := {}  # lattice nodes that are solid tower-blocks (path avoids)
 
+## Build a Generated map: walls stamped from a procedurally generated 0/1 grid.
+##
+## ---- INVARIANTS ----
+## Every generated map MUST satisfy all of these. Any change that breaks any
+## of them is a regression (v51/v52's "thinning" violated invariants 2 + 4
+## and produced unplayable maps full of empty space and orphan dots):
+##
+##   1. ONE continuous spawn -> base path. Single connected route, no extra
+##      reachable regions. (The Hamiltonian generator guarantees this by
+##      construction - it's a path visiting every reachable lattice node.)
+##   2. The path is a SINGLE-CELL-WIDE corridor. It never widens into a
+##      "room" or open area.
+##   3. The path NEVER CROSSES OR TOUCHES ITSELF. Hamiltonian = each node
+##      visited exactly once; backbite randomization preserves this.
+##   4. EVERY non-path cell is either a wall or part of a deliberate block.
+##      There are no empty cells outside the path. If you're staring at a
+##      blank cell that isn't the corridor, something is wrong.
+##   5. Deliberate blocks come from `_generate_blocked` marking 3-5 lattice
+##      nodes as `_ham_blocked`. Their 3x3/3x5/5x3/5x5 wall footprint is the
+##      only structural variation; the rest of the wall mass is whatever
+##      cells the path doesn't carve.
+##
+## Modifications should change WHERE the path goes / WHERE blocks are placed,
+## not add post-processing that erodes the wall mass or carves new openings.
+##
+## Seed: persisted in GameState.generated_seed so "Same map" replays exactly.
+## We restore non-deterministic randomness with randomize() after generation
+## so waves / sparks / enemy jitter aren't locked to the seed.
 func _build_generated_map() -> void:
 	# Seed the global RNG so the generated layout is reproducible (a "Same map"
 	# New Game replays the same seed; "New map" first clears generated_seed to
@@ -959,6 +987,20 @@ func _update_preview() -> void:
 
 ## Per-frame: rebuild a spatial bucket grid so towers / traps / bullets can
 ## query nearby enemies in O(bucket) instead of scanning every enemy.
+##
+## CRITICAL PERF: at high game speeds with hundreds of live enemies, naive
+## "scan every enemy for distance" is O(towers x enemies) per frame and
+## drops the framerate hard. The bucket grid makes target acquisition local.
+## DO NOT replace with `get_tree().get_nodes_in_group("enemies")` in hot
+## paths - that was the bottleneck before this existed.
+##
+## BUCKET_SIZE = 160 px = 4 cells (CELL = 40). Each bucket usually holds
+## ~0-10 enemies. enemies_near(pos, radius) checks just the buckets whose
+## bounds intersect the radius, then per-enemy distance-check those.
+##
+## Rebuilt fresh every frame (cheap - O(enemies)) because enemies move.
+## If you change BUCKET_SIZE, also revisit enemies_near's bucket-scan loop
+## which assumes ceil(radius / BUCKET_SIZE) buckets in each direction.
 func _rebuild_enemy_buckets() -> void:
 	_enemy_buckets.clear()
 	for node in enemies.get_children():

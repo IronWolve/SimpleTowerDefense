@@ -76,6 +76,21 @@ func info_text() -> String:
 		t += "   slow %d%%" % int(slow * 100.0)
 	return t
 
+## Per-frame tower behaviour. The TWO COOLDOWNS deserve a callout:
+##
+##   _cooldown        gates DAMAGE delivery (1 / fire_rate seconds per shot).
+##                    Every shot still hits for full damage.
+##   _visual_cd       gates VISIBLE projectile spawn (VISUAL_SHOT_INTERVAL).
+##                    When a shot is throttled, _fire() routes straight to
+##                    _direct_hit and skips spawning a Bullet node.
+##
+## A maxed Bullet (~4 shots/sec) would otherwise look like a solid laser
+## stream of bullets; the throttle keeps the *visual* down to ~5/sec while
+## damage continues at the real rate. DO NOT collapse these two cooldowns
+## into one - you'd either nerf the DPS or restore the laser-stream look.
+##
+## The `shots < 12` cap is per-frame so a 100x-speed tower can't burn the
+## whole frame budget firing; the rest of the catch-up happens next frame.
 func _process(delta: float) -> void:
 	if GameState.game_over:
 		return

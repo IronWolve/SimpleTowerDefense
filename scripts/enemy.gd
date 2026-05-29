@@ -147,6 +147,21 @@ func _reach_base() -> void:
 	GameState.lose_life(leak_damage)
 	queue_free()
 
+## Damage pipeline. THE MATH:
+##
+##   health -= amount * resist[dtype] * (1 + vuln_pct)
+##
+## `resist[dtype]` is a MULTIPLIER on incoming damage, NOT a reduction:
+##   resist["fire"] = 0.35  means take 35% of fire damage (65% effectively
+##   resisted). Missing key defaults to 1.0 (full damage).
+##
+## `_vuln_pct` (poison vulnerability) is a SEPARATE multiplier applied on
+## top - so a fire-resistant Tank that's also poisoned still takes the
+## resist hit, then the vuln multiplies whatever's left. Vuln stacks with
+## resist, doesn't replace it.
+##
+## All damage paths land here: bullets, AOE, beams, traps, DoTs. So this
+## is the one place per-enemy damage gets resolved.
 func take_damage(amount: float, dtype := "physical") -> void:
 	if _dead:
 		return

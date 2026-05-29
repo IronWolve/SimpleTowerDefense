@@ -136,10 +136,40 @@ static func cost(type: String) -> int:
 static func category(type: String) -> String:
 	return TYPES[type]["category"]
 
-## Effective stats for a tower at a given level (level 1 == base). Uncapped.
-## Damage uses polynomial scaling plus a global +15% and +10% boost (cannon
-## additionally +5%). Range grows linearly +15/level (25% less than before).
-## Fire rate has per-type rules so each tower upgrades distinctly.
+## Effective stats for a tower at a given level. The math, top to bottom:
+##
+##   DAMAGE
+##     base * (1 + dmg_step * n) ^ dmg_exp * dmg_mult
+##       where n = level - 1; dmg_step = 0.5 (sniper) else 0.4; dmg_exp = 1.4
+##       dmg_mult = 1.10 * 1.05 universal, plus 1.05 * 1.05 again for cannon.
+##     So damage scales polynomially, not exponentially - level 100 ≈ 70×
+##     base, not 2^100× base. The cannon double-boost is its "AOE specialist
+##     tax" - it costs more per shot, so it gets a bit more bang.
+##
+##   RANGE
+##     base + 15 * (n / 2)   -- integer division. +15 every 2 levels, not
+##     every level. Clamped to RANGE_CAP[type] so a maxed tower can't
+##     blanket the map. Support towers (Gold/Amp, base 0) stay at 0.
+##
+##   FIRE RATE - per type:
+##     bullet (`"tower"`): linear +0.25/level, HARD CAP at 4.0/s so damage
+##                         still scales but the rate doesn't compound past it.
+##     sniper, missile:    doubles every 30 levels (was 20 - softened to keep
+##                         late game in line with enemy HP).
+##     ice, laser, cannon: gentle linear +8%/level.
+##
+##   SLOW (ice & tar share this curve)
+##     linear from base_slow at L1 to SLOW_CAP (0.80) at SLOW_MAX_LEVEL (40).
+##     An adjacent Amplifier lifts the EFFECTIVE slow at runtime up to
+##     SLOW_BOOST_CAP (0.95) - that boost is computed downstream, not here.
+##
+##   SLOW DURATION
+##     base + 1s/level. So Ice L10 ≈ 2.6 + 9 = 11.6s.
+##
+##   AOE RADIUS (cannon, missile)
+##     base + 5/level, clamped to AOE_CAP[type].
+##
+## Level 1 is unmodified base (n = 0). DON'T call with level < 1.
 static func tower_stats(type: String, level: int) -> Dictionary:
 	var d: Dictionary = TYPES[type].duplicate(true)
 	var n := level - 1
@@ -193,10 +223,31 @@ static func tower_stats(type: String, level: int) -> Dictionary:
 			d["aoe_radius"] = minf(AOE_CAP[type], d["aoe_radius"])
 	return d
 
-## Effective stats for a trap at a given level (level 1 == base).
-## Spike has its own linear damage scaling that tracks ~5% of wave-N enemy HP.
-## Tar is slow-only (no damage) and shares the slow curve: it reaches SLOW_CAP
-## at SLOW_MAX_LEVEL. Volcano's AOE radius never grows past its base.
+## Effective stats for a trap at a given level. The math:
+##
+##   DAMAGE (poison, fire, volcano)
+##     base * (1 + 0.3 * n) ^ 1.4   -- same shape as tower damage but with
+##     dmg_step 0.3 instead of 0.4, so traps scale slower than towers.
+##
+##   SPIKE DAMAGE is a SPECIAL CASE
+##     d["damage"] = 2 + 2 * n   (flat scaling, just kills early trash).
+##     The real spike pain is a %-of-max-HP tick applied in
+##     Trap._process_contact - that's where spikes hurt tanks and bosses
+##     even when the flat damage here would be useless against their HP.
+##
+##   SLOW (tar) - shares the Ice curve from tower_stats: linear from base to
+##     SLOW_CAP at SLOW_MAX_LEVEL. An adjacent Amplifier lifts it at runtime
+##     up to SLOW_BOOST_CAP.
+##
+##   VOLCANO AOE RADIUS does NOT grow per level - it stays at the base
+##     1-cell-around. Amplifier boosts the effective radius at runtime;
+##     this static table doesn't.
+##
+##   DOT DURATION (poison, fire) is per-level via the trap.gd logic (+1s
+##     per level for fire; +1s and +1% vuln per level for poison) - NOT
+##     here. This function only returns the base table value for slow_time.
+##
+## Level 1 is unmodified base (n = 0). DON'T call with level < 1.
 static func trap_stats(type: String, level: int) -> Dictionary:
 	var d: Dictionary = TYPES[type].duplicate(true)
 	var n := level - 1

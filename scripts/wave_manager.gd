@@ -3,6 +3,37 @@ extends Node
 ## Endless waves. Each "Send Wave" press adds a concurrent spawn job.
 ## Every 10th wave is a boss wave; the run only ends when lives reach zero.
 ## When everything is cleared, a countdown auto-starts the next wave.
+##
+## ---- WAVE / BOSS SCALING (the curves that matter for balance) ----
+##
+## Normal wave at wave N:
+##   hp     = 20 + (N-1) * 18        -- per-enemy base HP (Grunt has *1.0,
+##                                       Runner *0.5, Tank *3.4 on top)
+##   spd    = base + small ramp      -- per-enemy speed multipliers as well
+##   count  = grows with wave        -- more enemies per wave over time
+##   reward = _base_reward(N)        -- +1 gold per wave per enemy
+##
+## Boss wave (5, 15, 25, ...):
+##   hp     = normal * (4.0 + N/10)  -- big multiplier on top, so bosses
+##                                       always feel scary at every tier
+##   count  = 1, 2, 3, 5, 7, ...     -- BOSS_COUNTS schedule
+##   reward = base * BOSS_REWARD_MULT (10x normal)
+##
+## Turtle (rides every boss wave):
+##   count grows +1 per boss wave (1 at W5, 2 at W15, ...)
+##   hp    *= a "tank" multiplier that grows with each boss wave too
+##   speed: 60% of normal boss speed - slow but very tough
+##
+## Boss leak cost: BOSS_LEAK below. Beetles/spiders cost 5 lives, turtles
+## cost 8. Normal enemies still cost 1. (Tracked in CHECKLIST under
+## Gameplay numbers - Enemies.)
+##
+## Deploy styles (STYLES): each wave rotates through Steady / Swarm / Heavy /
+## Squads, which biases _pick_type's weights. Style is decorative for
+## variety; HP/reward curves are wave-N regardless of style.
+##
+## Save/load: serialize() captures the active spawn jobs and queued waves so
+## a saved run resumes mid-wave with enemies in flight.
 
 const ENEMY_CAP := 40
 const COUNTDOWN := 10.0
